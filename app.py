@@ -19,9 +19,9 @@ with st.sidebar:
             "gemini-3.5-flash",
             "gemini-3.1-flash-lite",
         ],
-        index=0,
+        index=1,
         format_func=lambda x: {
-            "gemini-3.5-flash": "Gemini 3.5 Flash（預設）",
+            "gemini-3.5-flash": "Gemini 3.5 Flash",
             "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
         }[x],
     )
