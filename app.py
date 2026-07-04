@@ -15,16 +15,22 @@ with st.sidebar:
     gemini_model = st.selectbox(
         "Gemini 模型",
         options=[
-            "gemini-3.5-flash",
-            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite-preview-06-17",
         ],
         index=0,
         format_func=lambda x: {
-            "gemini-3.5-flash": "gemini-3.5-flash（預設）",
-            "gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
+            "gemini-2.5-flash": "Gemini 2.5 Flash（預設）",
+            "gemini-2.5-flash-lite-preview-06-17": "Gemini 2.5 Flash Lite",
         }[x],
     )
     st.caption(f"目前選用：`{gemini_model}`")
+    st.divider()
+    gemini_only = st.checkbox(
+        "⚡ 僅用 Gemini（略過 Azure）",
+        value=False,
+        help="打勾後上傳圖片只會呼叫 Gemini，不會送至 Azure Document Intelligence。",
+    )
 
 st.title("👁️ 軋輥組裝報表 OCR 分析")
 
