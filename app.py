@@ -134,8 +134,10 @@ def create_excel_report(parsed_data):
                     
                     cell_id = ws.cell(row=current_row, column=col_id, value=r_id)
                     
+                    # 💡 關鍵修改：嘗試轉成浮點數，如果原本字串有小數點，就強制套用小數點後兩位的格式
+                    has_decimal = '.' in r_val
                     try:
-                        val_num = float(r_val) if '.' in r_val else int(r_val)
+                        val_num = float(r_val) if has_decimal else int(r_val)
                     except ValueError:
                         val_num = r_val
                         
@@ -145,7 +147,13 @@ def create_excel_report(parsed_data):
                     cell_id.alignment = align_center
                     
                     cell_val.font = font_body
-                    cell_val.alignment = align_center  # 配合你的需求，尺寸也一律置中
+                    cell_val.alignment = align_center  # 尺寸置中
+                    
+                    # 💡 關鍵修改：如果是數值且原本有小數點（包含 .00），強制在 Excel 裡顯示兩位小數
+                    if isinstance(val_num, (int, float)) and has_decimal:
+                        cell_val.number_format = '0.00'
+                    elif isinstance(val_num, int):
+                        cell_val.number_format = '0'  # 整數就維持整數格式
                     
                 current_row += 1
 
