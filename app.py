@@ -27,7 +27,7 @@ with st.sidebar:
     )
     st.caption(f"目前選用：`{gemini_model}`")
 
-st.markdown("<h2 style='font-size: 20px; margin-bottom: 12px;'>軋輥組裝報表 OCR 分析</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='font-size: 20px; margin-bottom: 8px;'>輥輪組裝報表 OCR 分析</h2>", unsafe_allow_html=True)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
@@ -35,7 +35,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 def create_excel_report(parsed_data):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "軋輥組裝報表"
+    ws.title = "輥輪施工編號明細"
 
     # 1. 基礎樣式與配色定義
     font_header = Font(name="微軟正黑體", size=10, bold=True, color="FFFFFF")
