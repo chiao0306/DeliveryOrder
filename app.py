@@ -58,4 +58,6 @@ if uploaded_file:
                     st.warning("⚠️ Azure 沒偵測到任何表格結構。")
 
             except Exception as e:
+                # 💡 讓網頁直接自白它到底讀到了什麼鬼網址
+                st.error(f"🔍 DEBUG 偵錯資訊（請檢查這段網址）：[{AZURE_ENDPOINT}]")
                 st.error(f"辨識發生錯誤：{e}")
