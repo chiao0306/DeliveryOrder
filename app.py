@@ -15,17 +15,17 @@ with st.sidebar:
             "gemini-3.5-flash",
             "gemini-3.1-flash-lite",
         ],
-        index=1,
+        index=0,
         format_func=lambda x: {
-            "gemini-3.5-flash": "Gemini 3.5 Flash",
+            "gemini-3.5-flash": "Gemini 3.5 Flash（預設）",
             "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
         }[x],
     )
     st.caption(f"目前選用：`{gemini_model}`")
 
-st.title("軋輥組裝報表 OCR 分析")
+st.title("👁️ 軋輥組裝報表 OCR 分析")
 
-# 只保留 Gemini 的環境變數
+# 取得 Gemini 的環境變數
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 uploaded_file = st.file_uploader(
@@ -39,12 +39,13 @@ if uploaded_file:
     if not GEMINI_API_KEY:
         st.error("⚠️ 請設定 GEMINI_API_KEY 環境變數。")
     else:
+        # 修改後的 Prompt，加入「輥輪型號」的分層邏輯
         PROMPT = """
 你是工廠軋輥維修報表的資料擷取助手。
 請分析這張「軋輥組裝報表」圖片，依照以下規則輸出 JSON：
 
 規則：
-1. 掃描每一筆軋輥記錄（每一列）。
+1. 掃描每一筆軋輥記錄（每一列）。注意報表中有區段標示不同的「輥輪型號」（例如 30D, 30S, 30L）。
 2. 欄位對應如下：
    - 粗車（Roll 粗車尺寸，非軸位）
    - 再生（Roll 再生尺寸）
@@ -54,16 +55,31 @@ if uploaded_file:
    - 軸位精車（軸位精車尺寸）
 3. 若該格為數字（含小數），代表有施做，請記錄該數字（字串格式）。
 4. 若該格為「X」或空白，代表未施做，請略過（不要包含在輸出中）。
-5. 每個類別只輸出「有施做」的項目，以 { "編號": "尺寸" } 的鍵值對表示。
+5. 每個類別只輸出「有施做」的項目。
+6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸】。
 
 輸出格式範例（只輸出 JSON，不要加任何說明文字）：
 {
-  "粗車": { "M30S141": "307" },
-  "再生": {},
-  "精車": { "M30S141": "300.07", "V30S58": "300.02" },
-  "軸位粗車": { "V30S58": "146" },
-  "軸位再生": { "V30S58": "155" },
-  "軸位精車": { "V30S58": "149.97" }
+  "粗車": {
+    "30D": { "N30DL90": "288", "30DL13": "288" },
+    "30S": { "V30S58": "287", "M30S141": "288" }
+  },
+  "再生": {
+    "30D": { "N30DL90": "307" }
+  },
+  "精車": {
+    "30D": { "N30DL90": "300.06" }
+  },
+  "軸位粗車": {
+    "30S": { "V30S58": "146" }
+  },
+  "軸位再生": {
+    "30S": { "V30S58": "155" },
+    "30L": { "M30L237": "155" }
+  },
+  "軸位精車": {
+    "30S": { "V30S58": "149.97" }
+  }
 }
 
 請直接輸出 JSON，不要加 markdown 代碼區塊。
@@ -129,14 +145,22 @@ if uploaded_file:
                 st.success("✅ Gemini 辨識成功！")
 
                 CATEGORIES = ["粗車", "再生", "精車", "軸位粗車", "軸位再生", "軸位精車"]
+                
+                # 修改顯示邏輯：對應多加的一層「輥輪型號」
                 for cat in CATEGORIES:
-                    items = parsed.get(cat, {})
-                    count = len(items)
-                    label = f"**{cat}**（{count} 件）" if count else f"{cat}（無施做）"
-                    with st.expander(label, expanded=(count > 0)):
-                        if items:
-                            for roller_id, size in items.items():
-                                st.write(f"- `{roller_id}` → **{size}**")
+                    types_dict = parsed.get(cat, {})
+                    # 計算這個施工類別下，所有型號的總件數
+                    total_count = sum(len(rollers) for rollers in types_dict.values())
+                    
+                    label = f"**{cat}**（{total_count} 件）" if total_count else f"{cat}（無施做）"
+                    with st.expander(label, expanded=(total_count > 0)):
+                        if total_count > 0:
+                            # 依序印出不同型號
+                            for r_type, rollers in types_dict.items():
+                                if rollers:  # 如果該型號下有資料
+                                    st.markdown(f"**🔹 型號：{r_type}**")
+                                    for roller_id, size in rollers.items():
+                                        st.write(f" - `{roller_id}` → **{size}**")
                         else:
                             st.caption("本次無此項目。")
 
