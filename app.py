@@ -19,10 +19,11 @@ if uploaded_file:
     else:
         with st.spinner("正在將檔案傳送至 Azure Document Intelligence..."):
             try:
-                # 💡 加上 api_version 參數確保雲端相容性
+                # 修正成最穩定的方式
                 client = DocumentIntelligenceClient(
                     endpoint=AZURE_ENDPOINT,
-                    credential=AzureKeyCredential(AZURE_KEY),
+                    credential=AzureKeyCredential(AZURE_KEY)
+                )
                     api_version="2024-11-30-preview" # 使用穩定的最新預覽版
                 )
                 
