@@ -1,0 +1,24 @@
+steps:
+  # 第一步：使用 Google 的 Buildpacks 自動將程式碼打包成容器映像檔
+  - name: 'gcr.io/k8s-skaffold/pack'
+    entrypoint: 'pack'
+    args:
+      - 'build'
+      - 'gcr.io/$PROJECT_ID/deliveryorder'
+      - '--builder=gcr.io/buildpacks/builder:v1'
+
+  # 第二步：部署到 Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'deliveryorder'         # 對應您圖片中的服務名稱
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/deliveryorder'
+      - '--region'
+      - 'asia-east1'            # 對應您圖片中的地區
+
+# 🎯 強制指定日誌設定，這行就是用來解開您一開始遇到錯誤的關鍵！
+options:
+  logging: CLOUD_LOGGING_ONLY
