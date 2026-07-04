@@ -27,7 +27,7 @@ with st.sidebar:
     )
     st.caption(f"目前選用：`{gemini_model}`")
 
-st.title("👁️ 軋輥組裝報表 OCR 分析")
+st.title("軋輥組裝報表 OCR 分析")
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
