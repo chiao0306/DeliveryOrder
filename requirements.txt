@@ -2,3 +2,4 @@ streamlit
 azure-ai-documentintelligence
 azure-core
 azure-identity
+openpyxl
