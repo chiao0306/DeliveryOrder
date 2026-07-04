@@ -22,7 +22,8 @@ if uploaded_file:
                 # 修正成最穩定的方式
                 client = DocumentIntelligenceClient(
                     endpoint=AZURE_ENDPOINT,
-                    credential=AzureKeyCredential(AZURE_KEY)
+                    credential=AzureKeyCredential(AZURE_KEY),
+                    api_version="2024-11-30-preview"  # 👈 必須加上這一行，結尾要記得加逗點
                 )
                 
                 # 讀取二進位圖檔
