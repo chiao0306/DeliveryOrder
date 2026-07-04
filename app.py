@@ -24,8 +24,6 @@ if uploaded_file:
                     endpoint=AZURE_ENDPOINT,
                     credential=AzureKeyCredential(AZURE_KEY)
                 )
-                    api_version="2024-11-30-preview" # 使用穩定的最新預覽版
-                )
                 
                 # 讀取二進位圖檔
                 file_content = uploaded_file.getvalue()
