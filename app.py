@@ -27,7 +27,7 @@ with st.sidebar:
     )
     st.caption(f"目前選用：`{gemini_model}`")
 
-st.markdown("<h2 style='font-size: 20px; margin-bottom: 20px;'>軋輥組裝報表 OCR 分析</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='font-size: 20px; margin-bottom: 12px;'>軋輥組裝報表 OCR 分析</h2>", unsafe_allow_html=True)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
