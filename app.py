@@ -1,12 +1,13 @@
 import streamlit as st
 import os
 from azure.core.credentials import AzureKeyCredential
+# 💡 修正最新版微軟 SDK 的正確導入路徑
 from azure.ai.documentintelligence import DocumentIntelligenceClient
+from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
 
 st.set_page_config(page_title="Azure OCR 測試", layout="centered")
 st.title("👁️ Azure OCR 表格切割測試")
 
-# 從 Cloud Run 環境變數讀取金鑰
 AZURE_ENDPOINT = os.environ.get("AZURE_ENDPOINT", "")
 AZURE_KEY = os.environ.get("AZURE_KEY", "")
 
@@ -16,31 +17,32 @@ if uploaded_file:
     if not AZURE_ENDPOINT or not AZURE_KEY:
         st.error("⚠️ 請至 Cloud Run 設定 AZURE_ENDPOINT 與 AZURE_KEY 環境變數。")
     else:
-        with st.spinner("正在將檔案傳送至 Azure Document Intelligence (prebuilt-layout)..."):
+        with st.spinner("正在將檔案傳送至 Azure Document Intelligence..."):
             try:
-                # 建立 Azure 客戶端
+                # 💡 加上 api_version 參數確保雲端相容性
                 client = DocumentIntelligenceClient(
                     endpoint=AZURE_ENDPOINT,
-                    credential=AzureKeyCredential(AZURE_KEY)
+                    credential=AzureKeyCredential(AZURE_KEY),
+                    api_version="2024-11-30-preview" # 使用穩定的最新預覽版
                 )
+                
+                # 讀取二進位圖檔
                 file_content = uploaded_file.getvalue()
                 
-                # 呼叫 layout 模型分析表格
+                # 💡 最新版 SDK 的標準呼叫做法：改用 begin_analyze_document 傳入 bytes
                 poller = client.begin_analyze_document(
-                    "prebuilt-layout",
-                    file_content
+                    model_id="prebuilt-layout",
+                    analyze_request=file_content,
+                    content_type=uploaded_file.type
                 )
                 result = poller.result()
 
                 st.success("✅ Azure 辨識成功！")
 
-                # 印出表格切割結果
                 if result.tables:
                     st.subheader(f"📊 偵測到 {len(result.tables)} 個表格區域")
                     for table_idx, table in enumerate(result.tables):
                         with st.expander(f"📌 表格 {table_idx + 1} (共 {table.row_count} 列)", expanded=True):
-                            
-                            # 將 Azure 的 cell 座標轉換為列字典
                             table_data = {}
                             for cell in table.cells:
                                 r, c = cell.row_index, cell.column_index
@@ -48,8 +50,8 @@ if uploaded_file:
                                     table_data[r] = {}
                                 table_data[r][c] = cell.content.replace("\n", " ")
 
-                            # 逐列印出
                             for r in sorted(table_data.keys()):
+                                # 💡 防止某些格子空值造成報錯，加上 get 保底
                                 row_text = " | ".join([table_data[r].get(c, "") for c in range(table.column_count)])
                                 st.code(row_text, language="markdown")
                 else:
