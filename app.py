@@ -129,7 +129,7 @@ def create_excel_report(parsed_data):
                     cell_id.border = border_thin
                     
                     cell_val.font = font_body
-                    cell_val.alignment = align_right if isinstance(val_num, (int, float)) else align_center
+                    cell_val.alignment = align_center
                     cell_val.border = border_thin
                     
                 # 填補剩下的空白框線，保持表格完整性
