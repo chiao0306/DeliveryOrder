@@ -15,13 +15,13 @@ with st.sidebar:
     gemini_model = st.selectbox(
         "Gemini 模型",
         options=[
-            "gemini-3.5-flash",
-            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite-preview-06-17",
         ],
         index=0,
         format_func=lambda x: {
-            "gemini-3.5-flash": "Gemini 3.5 Flash（預設）",
-            "gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
+            "gemini-2.5-flash": "Gemini 2.5 Flash（預設）",
+            "gemini-2.5-flash-lite-preview-06-17": "Gemini 2.5 Flash Lite",
         }[x],
     )
     st.caption(f"目前選用：`{gemini_model}`")
@@ -45,61 +45,67 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     file_content = uploaded_file.getvalue()
 
-    # ── 兩欄並排 ────────────────────────────────────────────────
-    col_azure, col_gemini = st.columns(2)
+    # ── 版面：略過 Azure 時單欄全寬，否則雙欄 ───────────────────
+    if gemini_only:
+        col_azure = None
+        col_gemini = st.container()
+    else:
+        _cols = st.columns(2)
+        col_azure, col_gemini = _cols[0], _cols[1]
 
     # ════════════════════════════════════════════════════════════
-    # 左欄：Azure Document Intelligence
+    # 左欄：Azure Document Intelligence（略過時跳過）
     # ════════════════════════════════════════════════════════════
-    with col_azure:
-        st.subheader("🔷 Azure Document Intelligence")
-        if not AZURE_ENDPOINT or not AZURE_KEY:
-            st.error("⚠️ 請設定 AZURE_ENDPOINT 與 AZURE_KEY 環境變數。")
-        else:
-            with st.spinner("傳送至 Azure 辨識中…"):
-                try:
-                    client = DocumentIntelligenceClient(
-                        endpoint=AZURE_ENDPOINT,
-                        credential=AzureKeyCredential(AZURE_KEY),
-                        api_version="2024-11-30",
-                    )
-                    poller = client.begin_analyze_document(
-                        model_id="prebuilt-layout",
-                        body=file_content,
-                    )
-                    result = poller.result()
-                    st.success("✅ Azure 辨識成功！")
+    if not gemini_only:
+        with col_azure:
+            st.subheader("🔷 Azure Document Intelligence")
+            if not AZURE_ENDPOINT or not AZURE_KEY:
+                st.error("⚠️ 請設定 AZURE_ENDPOINT 與 AZURE_KEY 環境變數。")
+            else:
+                with st.spinner("傳送至 Azure 辨識中…"):
+                    try:
+                        client = DocumentIntelligenceClient(
+                            endpoint=AZURE_ENDPOINT,
+                            credential=AzureKeyCredential(AZURE_KEY),
+                            api_version="2024-11-30",
+                        )
+                        poller = client.begin_analyze_document(
+                            model_id="prebuilt-layout",
+                            body=file_content,
+                        )
+                        result = poller.result()
+                        st.success("✅ Azure 辨識成功！")
 
-                    if result.tables:
-                        st.write(f"偵測到 **{len(result.tables)}** 個表格")
-                        for table_idx, table in enumerate(result.tables):
-                            with st.expander(
-                                f"📌 表格 {table_idx + 1}（{table.row_count} 列）",
-                                expanded=(table_idx == 0),
-                            ):
-                                table_data = {}
-                                for cell in table.cells:
-                                    r, c = cell.row_index, cell.column_index
-                                    if r not in table_data:
-                                        table_data[r] = {}
-                                    table_data[r][c] = cell.content.replace("\n", " ")
-                                for r in sorted(table_data.keys()):
-                                    row_text = " | ".join(
-                                        [
-                                            table_data[r].get(c, "")
-                                            for c in range(table.column_count)
-                                        ]
-                                    )
-                                    st.code(row_text, language="markdown")
-                    else:
-                        st.warning("⚠️ 未偵測到表格結構。")
+                        if result.tables:
+                            st.write(f"偵測到 **{len(result.tables)}** 個表格")
+                            for table_idx, table in enumerate(result.tables):
+                                with st.expander(
+                                    f"📌 表格 {table_idx + 1}（{table.row_count} 列）",
+                                    expanded=(table_idx == 0),
+                                ):
+                                    table_data = {}
+                                    for cell in table.cells:
+                                        r, c = cell.row_index, cell.column_index
+                                        if r not in table_data:
+                                            table_data[r] = {}
+                                        table_data[r][c] = cell.content.replace("\n", " ")
+                                    for r in sorted(table_data.keys()):
+                                        row_text = " | ".join(
+                                            [
+                                                table_data[r].get(c, "")
+                                                for c in range(table.column_count)
+                                            ]
+                                        )
+                                        st.code(row_text, language="markdown")
+                        else:
+                            st.warning("⚠️ 未偵測到表格結構。")
 
-                except Exception as e:
-                    st.error(f"🔍 端點：[{AZURE_ENDPOINT}]")
-                    st.error(f"辨識錯誤：{e}")
+                    except Exception as e:
+                        st.error(f"🔍 端點：[{AZURE_ENDPOINT}]")
+                        st.error(f"辨識錯誤：{e}")
 
     # ════════════════════════════════════════════════════════════
-    # 右欄：Gemini 視覺辨識 → JSON 結構化輸出
+    # 右欄（或全寬）：Gemini 視覺辨識 → JSON 結構化輸出
     # ════════════════════════════════════════════════════════════
     with col_gemini:
         st.subheader("🟢 Gemini 結構化辨識")
