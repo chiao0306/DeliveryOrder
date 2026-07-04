@@ -34,9 +34,7 @@ if uploaded_file:
                     model_id="prebuilt-layout",
                     body=file_content
                 )
-                    analyze_request=file_content,
-                    content_type=uploaded_file.type
-                )
+                
                 result = poller.result()
 
                 st.success("✅ Azure 辨識成功！")
