@@ -15,13 +15,13 @@ with st.sidebar:
     gemini_model = st.selectbox(
         "Gemini 模型",
         options=[
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite-preview-06-17",
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
         ],
         index=0,
         format_func=lambda x: {
-            "gemini-2.5-flash": "Gemini 2.5 Flash（預設）",
-            "gemini-2.5-flash-lite-preview-06-17": "Gemini 2.5 Flash Lite",
+            "gemini-3.5-flash": "Gemini 3.5 Flash（預設）",
+            "gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
         }[x],
     )
     st.caption(f"目前選用：`{gemini_model}`")
