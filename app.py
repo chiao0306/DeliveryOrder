@@ -27,7 +27,7 @@ with st.sidebar:
     )
     st.caption(f"目前選用：`{gemini_model}`")
 
-st.title("軋輥組裝報表 OCR 分析")
+st.markdown("<h2 style='font-size: 20px; margin-bottom: 20px;'>軋輥組裝報表 OCR 分析</h2>", unsafe_allow_html=True)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
@@ -155,7 +155,7 @@ def create_excel_report(parsed_data):
 
 
 uploaded_file = st.file_uploader(
-    "上傳報表圖檔（如：五號機軋輥組裝報表）", type=["jpg", "jpeg", "png", "pdf"]
+    "上傳報表圖檔", type=["jpg", "jpeg", "png", "pdf"]
 )
 
 if uploaded_file:
