@@ -29,9 +29,11 @@ if uploaded_file:
                 # 讀取二進位圖檔
                 file_content = uploaded_file.getvalue()
                 
-                # 💡 最新版 SDK 的標準呼叫做法：改用 begin_analyze_document 傳入 bytes
+                # 呼叫 layout 模型分析表格
                 poller = client.begin_analyze_document(
                     model_id="prebuilt-layout",
+                    body=file_content
+                )
                     analyze_request=file_content,
                     content_type=uploaded_file.type
                 )
