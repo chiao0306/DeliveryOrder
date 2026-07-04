@@ -61,7 +61,7 @@ if uploaded_file:
                     client = DocumentIntelligenceClient(
                         endpoint=AZURE_ENDPOINT,
                         credential=AzureKeyCredential(AZURE_KEY),
-                        api_version="2024-02-29-preview",
+                        api_version="2024-11-30",
                     )
                     poller = client.begin_analyze_document(
                         model_id="prebuilt-layout",
