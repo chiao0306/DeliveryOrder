@@ -51,10 +51,7 @@ def create_excel_report(parsed_data):
         top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
     )
 
-    # ──────────────────────────────────────────
-    # 2. 寫入第一列標題 (擴充至 30 欄並設定合併)
-    # ──────────────────────────────────────────
-    # 先把 1 到 30 欄的框線、對齊與字型畫好
+    # 1. 寫入第一列標題 (擴充至 30 欄並設定合併)
     for col in range(1, 31):
         cell = ws.cell(row=1, column=col)
         cell.font = font_header
@@ -65,27 +62,22 @@ def create_excel_report(parsed_data):
     ws.cell(row=1, column=2, value="型號").fill = fill_header_main
     
     for i in range(7):
-        # 每組佔 4 欄：編號 2 欄，尺寸 2 欄
         col_id = 3 + i * 4
         col_val = 5 + i * 4
         current_pair_fill = fill_pair_1 if i % 2 == 0 else fill_pair_2
         
-        # 寫入文字並合併兩欄
         ws.cell(row=1, column=col_id, value="編號")
         ws.merge_cells(start_row=1, start_column=col_id, end_row=1, end_column=col_id+1)
         
         ws.cell(row=1, column=col_val, value="尺寸")
         ws.merge_cells(start_row=1, start_column=col_val, end_row=1, end_column=col_val+1)
         
-        # 填色 (合併儲存格需對底下的每一格填色，視覺才會完整)
         for c in range(col_id, col_id + 2):
             ws.cell(row=1, column=c).fill = current_pair_fill
         for c in range(col_val, col_val + 2):
             ws.cell(row=1, column=c).fill = current_pair_fill
 
-    # ──────────────────────────────────────────
-    # 3. 資料寫入與施工項目替換
-    # ──────────────────────────────────────────
+    # 2. 資料寫入與施工項目替換
     categories_order = [
         ("本體銲補", "再生"),
         ("軸頸銲補", "軸位再生"),
@@ -134,8 +126,8 @@ def create_excel_report(parsed_data):
                     cell_b.font = font_bold
                 cell_b.alignment = align_center
                 
+                # 填入有資料的編號與尺寸，並合併
                 for pair_idx, (r_id, r_val) in enumerate(chunk):
-                    # 配合新的欄位跨度計算
                     col_id = 3 + pair_idx * 4
                     col_val = 5 + pair_idx * 4
                     
@@ -160,12 +152,20 @@ def create_excel_report(parsed_data):
                         cell_val.number_format = '0.00'
                     elif isinstance(val_num, int):
                         cell_val.number_format = '0'
+                
+                # 💡 這裡就是新增的邏輯：把剩下的空白組也合併起來
+                for empty_idx in range(len(chunk), 7):
+                    empty_col_id = 3 + empty_idx * 4
+                    empty_col_val = 5 + empty_idx * 4
                     
+                    # 合併編號的空白格
+                    ws.merge_cells(start_row=current_row, start_column=empty_col_id, end_row=current_row, end_column=empty_col_id+1)
+                    # 合併尺寸的空白格
+                    ws.merge_cells(start_row=current_row, start_column=empty_col_val, end_row=current_row, end_column=empty_col_val+1)
+
                 current_row += 1
 
-    # ──────────────────────────────────────────
-    # 4. 自動調整欄寬 (支援中文與合併儲存格平分)
-    # ──────────────────────────────────────────
+    # 3. 自動調整欄寬
     for col in ws.columns:
         max_width = 0
         for cell in col:
@@ -178,7 +178,6 @@ def create_excel_report(parsed_data):
         col_idx = col[0].column
         padding = 0.5 if col_idx == 1 else 3
         
-        # 💡 如果是第 3 欄之後（合併的欄位），寬度由兩欄平分，避免單一欄過寬
         if col_idx >= 3:
             final_width = (max_width + padding) / 2
         else:
