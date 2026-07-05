@@ -104,14 +104,11 @@ def create_excel_report(parsed_data):
             
             for chunk_idx in range(0, len(items), 7):
                 chunk = items[chunk_idx:chunk_idx+7]
-                current_fill = fill_row_even if current_row % 2 == 0 else None
                 
-                # 初始化 30 欄框線與底色
+                # 初始化 30 欄框線 (取消底色)
                 for col in range(1, 31):
                     c = ws.cell(row=current_row, column=col)
                     c.border = border_thin
-                    if current_fill:
-                        c.fill = current_fill
                 
                 cell_a = ws.cell(row=current_row, column=1)
                 if is_first_cat_row:
