@@ -34,19 +34,15 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 def create_excel_report(parsed_data):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "輥輪尺寸編號明細"
+    ws.title = "軋輥組裝報表"
 
-    # 1. 基礎樣式與配色定義
     font_header = Font(name="微軟正黑體", size=10, bold=True, color="FFFFFF")
     font_body = Font(name="微軟正黑體", size=10)
     font_bold = Font(name="微軟正黑體", size=10, bold=True)
     
-    # 配色方案：前兩欄深藍色，後面編號尺寸組以綠/藍綠交錯
     fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
-    fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")  # 翡翠綠
-    fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")  # 薄荷綠
-    
-    # 縱向交錯列底色
+    fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")
+    fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
     fill_row_even = PatternFill(start_color="F8F9FA", end_color="F8F9FA", fill_type="solid") 
     
     align_center = Alignment(horizontal="center", vertical="center")
@@ -55,28 +51,41 @@ def create_excel_report(parsed_data):
         top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
     )
 
-    # 2. 寫入第一列標題
-    ws.cell(row=1, column=1, value="施工項目").fill = fill_header_main
-    ws.cell(row=1, column=2, value="型號").fill = fill_header_main
-    
-    # 寫入重複的「編號」與「尺寸」，並套用交錯底色
-    for i in range(7):
-        col_id = 3 + i * 2
-        col_val = 4 + i * 2
-        
-        # 奇數組與偶數組套用不同顏色，一組同色
-        current_pair_fill = fill_pair_1 if i % 2 == 0 else fill_pair_2
-        
-        ws.cell(row=1, column=col_id, value="編號").fill = current_pair_fill
-        ws.cell(row=1, column=col_val, value="尺寸").fill = current_pair_fill
-
-    for col in range(1, 17):
+    # ──────────────────────────────────────────
+    # 2. 寫入第一列標題 (擴充至 30 欄並設定合併)
+    # ──────────────────────────────────────────
+    # 先把 1 到 30 欄的框線、對齊與字型畫好
+    for col in range(1, 31):
         cell = ws.cell(row=1, column=col)
         cell.font = font_header
         cell.alignment = align_center
         cell.border = border_thin
 
+    ws.cell(row=1, column=1, value="施工項目").fill = fill_header_main
+    ws.cell(row=1, column=2, value="型號").fill = fill_header_main
+    
+    for i in range(7):
+        # 每組佔 4 欄：編號 2 欄，尺寸 2 欄
+        col_id = 3 + i * 4
+        col_val = 5 + i * 4
+        current_pair_fill = fill_pair_1 if i % 2 == 0 else fill_pair_2
+        
+        # 寫入文字並合併兩欄
+        ws.cell(row=1, column=col_id, value="編號")
+        ws.merge_cells(start_row=1, start_column=col_id, end_row=1, end_column=col_id+1)
+        
+        ws.cell(row=1, column=col_val, value="尺寸")
+        ws.merge_cells(start_row=1, start_column=col_val, end_row=1, end_column=col_val+1)
+        
+        # 填色 (合併儲存格需對底下的每一格填色，視覺才會完整)
+        for c in range(col_id, col_id + 2):
+            ws.cell(row=1, column=c).fill = current_pair_fill
+        for c in range(col_val, col_val + 2):
+            ws.cell(row=1, column=c).fill = current_pair_fill
+
+    # ──────────────────────────────────────────
     # 3. 資料寫入與施工項目替換
+    # ──────────────────────────────────────────
     categories_order = [
         ("本體銲補", "再生"),
         ("軸頸銲補", "軸位再生"),
@@ -103,17 +112,15 @@ def create_excel_report(parsed_data):
             
             for chunk_idx in range(0, len(items), 7):
                 chunk = items[chunk_idx:chunk_idx+7]
-                
                 current_fill = fill_row_even if current_row % 2 == 0 else None
                 
-                # 初始化整列框線與交錯底色
-                for col in range(1, 17):
+                # 初始化 30 欄框線與底色
+                for col in range(1, 31):
                     c = ws.cell(row=current_row, column=col)
                     c.border = border_thin
                     if current_fill:
                         c.fill = current_fill
                 
-                # 第一欄 (施工項目)
                 cell_a = ws.cell(row=current_row, column=1)
                 if is_first_cat_row:
                     cell_a.value = display_cat
@@ -121,31 +128,31 @@ def create_excel_report(parsed_data):
                     is_first_cat_row = False
                 cell_a.alignment = align_center
                 
-                # 第二欄 (型號)
                 cell_b = ws.cell(row=current_row, column=2)
                 if chunk_idx == 0:
                     cell_b.value = model
                     cell_b.font = font_bold
                 cell_b.alignment = align_center
                 
-                # 第三欄開始：填入編號與尺寸
                 for pair_idx, (r_id, r_val) in enumerate(chunk):
-                    col_id = 3 + pair_idx * 2
-                    col_val = 4 + pair_idx * 2
+                    # 配合新的欄位跨度計算
+                    col_id = 3 + pair_idx * 4
+                    col_val = 5 + pair_idx * 4
                     
                     cell_id = ws.cell(row=current_row, column=col_id, value=r_id)
+                    ws.merge_cells(start_row=current_row, start_column=col_id, end_row=current_row, end_column=col_id+1)
                     
-                    has_decimal = '.' in r_val
+                    has_decimal = '.' in str(r_val)
                     try:
                         val_num = float(r_val) if has_decimal else int(r_val)
                     except ValueError:
                         val_num = r_val
                         
                     cell_val = ws.cell(row=current_row, column=col_val, value=val_num)
+                    ws.merge_cells(start_row=current_row, start_column=col_val, end_row=current_row, end_column=col_val+1)
                     
                     cell_id.font = font_body
                     cell_id.alignment = align_center
-                    
                     cell_val.font = font_body
                     cell_val.alignment = align_center
                     
@@ -156,24 +163,28 @@ def create_excel_report(parsed_data):
                     
                 current_row += 1
 
-    # 4. 自動調整欄寬 (支援中文寬度判斷)
+    # ──────────────────────────────────────────
+    # 4. 自動調整欄寬 (支援中文與合併儲存格平分)
+    # ──────────────────────────────────────────
     for col in ws.columns:
         max_width = 0
         for cell in col:
             if cell.value:
                 text = str(cell.value)
-                # 若字元編碼大於 255 (如中文)，視為 2.2 單位寬度，英數字視為 1.1 單位
                 cell_width = sum(2.2 if ord(c) > 255 else 1.1 for c in text)
                 if cell_width > max_width:
                     max_width = cell_width
         
         col_idx = col[0].column
-        
-        # 💡 這裡就是修改的地方：
-        # 如果是第 1 欄（施工項目），留白設為 0.5 (甚至可以設 0)；其他欄位維持 3
         padding = 0.5 if col_idx == 1 else 3
         
-        ws.column_dimensions[get_column_letter(col_idx)].width = max(max_width + padding, 10)
+        # 💡 如果是第 3 欄之後（合併的欄位），寬度由兩欄平分，避免單一欄過寬
+        if col_idx >= 3:
+            final_width = (max_width + padding) / 2
+        else:
+            final_width = max_width + padding
+            
+        ws.column_dimensions[get_column_letter(col_idx)].width = max(final_width, 5)
 
     output = io.BytesIO()
     wb.save(output)
