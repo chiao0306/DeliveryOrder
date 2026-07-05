@@ -31,23 +31,22 @@ st.markdown("<h2 style='font-size: 20px; margin-bottom: 8px;'>輥輪組裝報表
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-# ── 修改後的產生 Excel 函數（包含標題拆分與底色交錯） ──────────────────────
 def create_excel_report(parsed_data):
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "輥輪施工編號明細"
+    ws.title = "輥輪尺寸編號明細"
 
     # 1. 基礎樣式與配色定義
     font_header = Font(name="微軟正黑體", size=10, bold=True, color="FFFFFF")
     font_body = Font(name="微軟正黑體", size=10)
     font_bold = Font(name="微軟正黑體", size=10, bold=True)
     
-    # 配色方案 (主題深藍、編號格淺藍灰、尺寸格極淺藍灰)
-    fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid") # 主標題深藍
-    fill_header_id = PatternFill(start_color="34495E", end_color="34495E", fill_type="solid")   # 標題編號
-    fill_header_val = PatternFill(start_color="415B76", end_color="415B76", fill_type="solid")  # 標題尺寸
+    # 配色方案：前兩欄深藍色，後面編號尺寸組以綠/藍綠交錯
+    fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+    fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")  # 翡翠綠
+    fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")  # 薄荷綠
     
-    # 縱向交錯列底色 (奇數列維持白色，偶數列使用極淺的灰藍色)
+    # 縱向交錯列底色
     fill_row_even = PatternFill(start_color="F8F9FA", end_color="F8F9FA", fill_type="solid") 
     
     align_center = Alignment(horizontal="center", vertical="center")
@@ -56,32 +55,35 @@ def create_excel_report(parsed_data):
         top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
     )
 
-    # 2. 寫入第一列：全新的標題列結構
+    # 2. 寫入第一列標題
     ws.cell(row=1, column=1, value="施工項目").fill = fill_header_main
     ws.cell(row=1, column=2, value="型號").fill = fill_header_main
     
-    # 重複 7 次寫入「編號」與「尺寸」標題
+    # 寫入重複的「編號」與「尺寸」，並套用交錯底色
     for i in range(7):
         col_id = 3 + i * 2
         col_val = 4 + i * 2
-        ws.cell(row=1, column=col_id, value=f"編號{i+1}").fill = fill_header_id
-        ws.cell(row=1, column=col_val, value=f"尺寸{i+1}").fill = fill_header_val
+        
+        # 奇數組與偶數組套用不同顏色，一組同色
+        current_pair_fill = fill_pair_1 if i % 2 == 0 else fill_pair_2
+        
+        ws.cell(row=1, column=col_id, value="編號").fill = current_pair_fill
+        ws.cell(row=1, column=col_val, value="尺寸").fill = current_pair_fill
 
-    # 為整行標題套用字型、對齊與邊框
     for col in range(1, 17):
         cell = ws.cell(row=1, column=col)
         cell.font = font_header
         cell.alignment = align_center
         cell.border = border_thin
 
-    # 3. 資料寫入與交錯底色邏輯
+    # 3. 資料寫入與施工項目替換
     categories_order = [
-        ("再生", "再生"),
-        ("軸頸再生", "軸位再生"),
-        ("粗車", "粗車"),
-        ("軸頸粗車", "軸位粗車"),
-        ("精車", "精車"),
-        ("軸頸精車", "軸位精車")
+        ("本體銲補", "再生"),
+        ("軸頸銲補", "軸位再生"),
+        ("本體未再生車修", "粗車"),
+        ("軸頸未再生車修", "軸位粗車"),
+        ("本體再生車修", "精車"),
+        ("軸頸再生車修", "軸位精車")
     ]
 
     current_row = 2
@@ -102,10 +104,9 @@ def create_excel_report(parsed_data):
             for chunk_idx in range(0, len(items), 7):
                 chunk = items[chunk_idx:chunk_idx+7]
                 
-                # 判斷目前列是奇數還是偶數列（做縱向交錯底色）
                 current_fill = fill_row_even if current_row % 2 == 0 else None
                 
-                # 初始化整列的底色與邊框防呆
+                # 初始化整列框線與交錯底色
                 for col in range(1, 17):
                     c = ws.cell(row=current_row, column=col)
                     c.border = border_thin
@@ -134,7 +135,6 @@ def create_excel_report(parsed_data):
                     
                     cell_id = ws.cell(row=current_row, column=col_id, value=r_id)
                     
-                    # 💡 關鍵修改：嘗試轉成浮點數，如果原本字串有小數點，就強制套用小數點後兩位的格式
                     has_decimal = '.' in r_val
                     try:
                         val_num = float(r_val) if has_decimal else int(r_val)
@@ -147,13 +147,12 @@ def create_excel_report(parsed_data):
                     cell_id.alignment = align_center
                     
                     cell_val.font = font_body
-                    cell_val.alignment = align_center  # 尺寸置中
+                    cell_val.alignment = align_center
                     
-                    # 💡 關鍵修改：如果是數值且原本有小數點（包含 .00），強制在 Excel 裡顯示兩位小數
                     if isinstance(val_num, (int, float)) and has_decimal:
                         cell_val.number_format = '0.00'
                     elif isinstance(val_num, int):
-                        cell_val.number_format = '0'  # 整數就維持整數格式
+                        cell_val.number_format = '0'
                     
                 current_row += 1
 
