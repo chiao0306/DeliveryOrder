@@ -167,8 +167,13 @@ def create_excel_report(parsed_data):
                 if cell_width > max_width:
                     max_width = cell_width
         
-        # 多加一點 padding 讓畫面有呼吸空間
-        ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_width + 3, 10)
+        col_idx = col[0].column
+        
+        # 💡 這裡就是修改的地方：
+        # 如果是第 1 欄（施工項目），留白設為 0.5 (甚至可以設 0)；其他欄位維持 3
+        padding = 0.5 if col_idx == 1 else 3
+        
+        ws.column_dimensions[get_column_letter(col_idx)].width = max(max_width + padding, 10)
 
     output = io.BytesIO()
     wb.save(output)
