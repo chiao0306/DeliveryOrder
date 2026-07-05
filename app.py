@@ -156,13 +156,19 @@ def create_excel_report(parsed_data):
                     
                 current_row += 1
 
-    # 4. 自動調整欄寬
+    # 4. 自動調整欄寬 (支援中文寬度判斷)
     for col in ws.columns:
-        max_len = 0
+        max_width = 0
         for cell in col:
             if cell.value:
-                max_len = max(max_len, len(str(cell.value)))
-        ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_len + 3, 10)
+                text = str(cell.value)
+                # 若字元編碼大於 255 (如中文)，視為 2.2 單位寬度，英數字視為 1.1 單位
+                cell_width = sum(2.2 if ord(c) > 255 else 1.1 for c in text)
+                if cell_width > max_width:
+                    max_width = cell_width
+        
+        # 多加一點 padding 讓畫面有呼吸空間
+        ws.column_dimensions[get_column_letter(col[0].column)].width = max(max_width + 3, 10)
 
     output = io.BytesIO()
     wb.save(output)
