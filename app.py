@@ -43,7 +43,7 @@ def create_excel_report(parsed_data):
     fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
     fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")
     fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
-    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid") # 💡 新增：亮黃色
+    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     
     align_center = Alignment(horizontal="center", vertical="center")
     border_thin = Border(
@@ -101,12 +101,27 @@ def create_excel_report(parsed_data):
             if not rollers:
                 continue
                 
-            items = list(rollers.items())
+            # 💡 在這裡進行預處理：建立新的 items 清單，數量為 2 就放兩次
+            items = []
+            is_shaft_cat = json_cat in ["軸位再生", "軸位粗車", "軸位精車"]
+            qty_data = parsed_data.get("軸位數量", {}).get(model, {})
+            
+            for r_id, r_val in rollers.items():
+                if is_shaft_cat and str(qty_data.get(r_id)) == "2":
+                    # 是軸頸項目且數量為 2：寫兩次，並標記 True (表示要塗黃色)
+                    items.append((r_id, r_val, True))
+                    items.append((r_id, r_val, True))
+                else:
+                    # 一般情況：寫一次，並標記 False (不塗色)
+                    items.append((r_id, r_val, False))
+                    
+            if not items:
+                continue
             
             for chunk_idx in range(0, len(items), 7):
                 chunk = items[chunk_idx:chunk_idx+7]
                 
-                # 初始化 30 欄框線 (取消底色)
+                # 初始化 30 欄框線 (維持全白)
                 for col in range(1, 31):
                     c = ws.cell(row=current_row, column=col)
                     c.border = border_thin
@@ -124,14 +139,10 @@ def create_excel_report(parsed_data):
                     cell_b.font = font_bold
                 cell_b.alignment = align_center
                 
-                # 第三欄開始：填入編號與尺寸
-                for pair_idx, (r_id, r_val) in enumerate(chunk):
+                # 解包剛才標記好的三個變數：編號、尺寸、是否塗黃
+                for pair_idx, (r_id, r_val, is_yellow) in enumerate(chunk):
                     col_id = 3 + pair_idx * 4
                     col_val = 5 + pair_idx * 4
-                    
-                    # 💡 新增：檢查目前是否為軸頸相關項目，且該輥輪的軸位數量是否為 2
-                    is_shaft_cat = json_cat in ["軸位再生", "軸位粗車", "軸位精車"]
-                    has_qty_2 = is_shaft_cat and parsed_data.get("軸位數量", {}).get(model, {}).get(r_id) == "2"
                     
                     cell_id = ws.cell(row=current_row, column=col_id, value=r_id)
                     ws.merge_cells(start_row=current_row, start_column=col_id, end_row=current_row, end_column=col_id+1)
@@ -155,21 +166,19 @@ def create_excel_report(parsed_data):
                     elif isinstance(val_num, int):
                         cell_val.number_format = '0'
                         
-                    # 💡 新增：如果是數量 2 的軸頸項目，將這 4 個合併儲存格強制上亮黃色底
-                    if has_qty_2:
+                    # 💡 若這筆資料有亮黃色標記，就將它所佔的 4 個合併格子塗色
+                    if is_yellow:
                         for c in range(col_id, col_id + 2):
                             ws.cell(row=current_row, column=c).fill = fill_yellow
                         for c in range(col_val, col_val + 2):
                             ws.cell(row=current_row, column=c).fill = fill_yellow
                 
-                # 💡 這裡就是新增的邏輯：把剩下的空白組也合併起來
+                # 合併後方沒有資料的空白格子
                 for empty_idx in range(len(chunk), 7):
                     empty_col_id = 3 + empty_idx * 4
                     empty_col_val = 5 + empty_idx * 4
                     
-                    # 合併編號的空白格
                     ws.merge_cells(start_row=current_row, start_column=empty_col_id, end_row=current_row, end_column=empty_col_id+1)
-                    # 合併尺寸的空白格
                     ws.merge_cells(start_row=current_row, start_column=empty_col_val, end_row=current_row, end_column=empty_col_val+1)
 
                 current_row += 1
