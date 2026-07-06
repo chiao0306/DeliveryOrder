@@ -214,7 +214,7 @@ uploaded_file = st.file_uploader(
 if uploaded_file:
     file_content = uploaded_file.getvalue()
 
-    st.subheader("🟢 Gemini 結構化辨識")
+    st.subheader("<h2 style='font-size: 20px; margin-bottom: 8px;'>🟢 Gemini 結構化辨識</h2>", unsafe_allow_html=True)
     if not GEMINI_API_KEY:
         st.error("⚠️ 請設定 GEMINI_API_KEY 環境變數。")
     else:
