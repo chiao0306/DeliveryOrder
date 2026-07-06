@@ -43,7 +43,7 @@ def create_excel_report(parsed_data):
     fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
     fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")
     fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
-    fill_row_even = PatternFill(start_color="F8F9FA", end_color="F8F9FA", fill_type="solid") 
+    fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid") # 💡 新增：亮黃色
     
     align_center = Alignment(horizontal="center", vertical="center")
     border_thin = Border(
@@ -124,10 +124,14 @@ def create_excel_report(parsed_data):
                     cell_b.font = font_bold
                 cell_b.alignment = align_center
                 
-                # 填入有資料的編號與尺寸，並合併
+                # 第三欄開始：填入編號與尺寸
                 for pair_idx, (r_id, r_val) in enumerate(chunk):
                     col_id = 3 + pair_idx * 4
                     col_val = 5 + pair_idx * 4
+                    
+                    # 💡 新增：檢查目前是否為軸頸相關項目，且該輥輪的軸位數量是否為 2
+                    is_shaft_cat = json_cat in ["軸位再生", "軸位粗車", "軸位精車"]
+                    has_qty_2 = is_shaft_cat and parsed_data.get("軸位數量", {}).get(model, {}).get(r_id) == "2"
                     
                     cell_id = ws.cell(row=current_row, column=col_id, value=r_id)
                     ws.merge_cells(start_row=current_row, start_column=col_id, end_row=current_row, end_column=col_id+1)
@@ -150,6 +154,13 @@ def create_excel_report(parsed_data):
                         cell_val.number_format = '0.00'
                     elif isinstance(val_num, int):
                         cell_val.number_format = '0'
+                        
+                    # 💡 新增：如果是數量 2 的軸頸項目，將這 4 個合併儲存格強制上亮黃色底
+                    if has_qty_2:
+                        for c in range(col_id, col_id + 2):
+                            ws.cell(row=current_row, column=c).fill = fill_yellow
+                        for c in range(col_val, col_val + 2):
+                            ws.cell(row=current_row, column=c).fill = fill_yellow
                 
                 # 💡 這裡就是新增的邏輯：把剩下的空白組也合併起來
                 for empty_idx in range(len(chunk), 7):
@@ -212,10 +223,11 @@ if uploaded_file:
    - 軸位再生（軸位再生尺寸）
    - 軸位精車（軸位精車尺寸）
    - 圓度（對應表上最右側的「圓度」數值）
+   - 軸位數量（對應表上的「軸位數量」欄位，若出現數字「2」請務必記錄）
 3. 若該格為數字（含小數），代表有施做，請記錄該數字（字串格式）。
 4. 若該格為「X」或空白，代表未施做，請略過（不要包含在輸出中）。
 5. 每個類別只輸出「有施做」的項目。
-6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸】。
+6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸或數量】。
 
 輸出格式範例（只輸出 JSON，不要加任何說明文字）：
 {
@@ -241,6 +253,9 @@ if uploaded_file:
   },
   "圓度": {
     "30D": { "N30DL90": "0.06", "30DL13": "0.06" }
+  },
+  "軸位數量": {
+    "30S": { "V30S58": "2" }
   }
 }
 
