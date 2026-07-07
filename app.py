@@ -107,13 +107,16 @@ def create_excel_report(parsed_data):
             qty_data = parsed_data.get("軸位數量", {}).get(model, {})
             
             for r_id, r_val in rollers.items():
+                # 去除可能的 _1, _2 後綴，只取原始編號顯示
+                display_id = r_id.split('_')[0] 
+                
                 if is_shaft_cat and str(qty_data.get(r_id)) == "2":
                     # 是軸頸項目且數量為 2：寫兩次，並標記 True (表示要塗黃色)
-                    items.append((r_id, r_val, True))
-                    items.append((r_id, r_val, True))
+                    items.append((display_id, r_val, True))
+                    items.append((display_id, r_val, True))
                 else:
                     # 一般情況：寫一次，並標記 False (不塗色)
-                    items.append((r_id, r_val, False))
+                    items.append((display_id, r_val, False))
                     
             if not items:
                 continue
@@ -223,7 +226,7 @@ if uploaded_file:
 請分析這張「軋輥組裝報表」圖片，依照以下規則輸出 JSON：
 
 規則：
-1. 掃描每一筆軋輥記錄（每一列）。注意報表中有區段標示不同的「輥輪型號」（例如 30D, 30S, 30L）。
+1. 掃描每一筆軋輥記錄（每一列）。注意報表中有區段標示不同的「輥輪型號」（例如 30D, 30S, 30L, 200, 170）。
 2. 欄位對應如下：
    - 粗車（Roll 粗車尺寸，非軸位）
    - 再生（Roll 再生尺寸）
@@ -237,6 +240,7 @@ if uploaded_file:
 4. 若該格為「X」或空白，代表未施做，請略過（不要包含在輸出中）。
 5. 每個類別只輸出「有施做」的項目。
 6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸或數量】。
+7. 【重要】若遇到「重複的輥輪編號」（也就是同一個編號在表中出現兩次以上），請務必在 JSON 的編號後方加上底線與流水號（例如遇到兩筆 ABC01，請輸出 "ABC01_1", "ABC01_2"），確保鍵值（Key）唯一，否則資料會被覆蓋遺失。此規則適用所有欄位。
 
 輸出格式範例（只輸出 JSON，不要加任何說明文字）：
 {
@@ -248,7 +252,7 @@ if uploaded_file:
     "30D": { "N30DL90": "307" }
   },
   "精車": {
-    "30D": { "N30DL90": "300.06" }
+    "200": { "TEST01_1": "199.95", "TEST01_2": "199.92" }
   },
   "軸位粗車": {
     "30S": { "V30S58": "146" }
@@ -268,7 +272,7 @@ if uploaded_file:
   }
 }
 
-請直接輸出 JSON，不要加 markdown 代碼區塊。
+請直接直接輸出 JSON，不要加 markdown 代碼區塊。
 """.strip()
 
         with st.spinner(f"使用 {gemini_model} 辨識中…"):
@@ -350,7 +354,9 @@ if uploaded_file:
                                 if rollers:
                                     st.markdown(f"**🔹 型號：{r_type}**")
                                     for roller_id, size in rollers.items():
-                                        st.write(f"　- `{roller_id}` → **{size}**")
+                                        # 去除畫面上顯示的後綴
+                                        display_id = roller_id.split('_')[0]
+                                        st.write(f"　- `{display_id}` → **{size}**")
                         else:
                             st.caption("本次無此項目。")
 
