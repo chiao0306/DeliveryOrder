@@ -311,7 +311,7 @@ if uploaded_file:
                     api_url,
                     headers={"Content-Type": "application/json"},
                     json=payload,
-                    timeout=60,
+                    timeout=120,
                 )
                 resp.raise_for_status()
                 raw_text = (
