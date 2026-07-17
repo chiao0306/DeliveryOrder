@@ -300,7 +300,16 @@ if uploaded_file:
                                 {"text": PROMPT},
                             ]
                         }
-                    ]
+                    ],
+                    # 💡 這是這隻工具慢的關鍵：Gemini 3.5 Flash 預設 thinkingLevel 是
+                    # "medium"，會先跑一輪內部推理才輸出，OCR 擷取這種任務用不到，
+                    # 關掉/調低可以大幅縮短等待時間。3.1 flash-lite 沒有這個預設行為，
+                    # 所以之前感覺快很多。
+                    "generationConfig": {
+                        "thinkingConfig": {
+                            "thinkingLevel": "minimal"
+                        }
+                    },
                 }
 
                 api_url = (
