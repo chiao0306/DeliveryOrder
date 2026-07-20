@@ -252,7 +252,7 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
         },
     }
 
-    api_url = f"[https://generativelanguage.googleapis.com/v1beta/models/](https://generativelanguage.googleapis.com/v1beta/models/){model}:generateContent?key={GEMINI_API_KEY}"
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
     
     try:
         resp = requests.post(api_url, headers={"Content-Type": "application/json"}, json=payload, timeout=120)
