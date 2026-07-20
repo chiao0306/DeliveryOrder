@@ -196,6 +196,40 @@ def create_excel_report(parsed_data: dict) -> io.BytesIO:
     wb.save(output)
     output.seek(0)
     return output
+    
+def normalize_parsed_data(parsed_data):
+    """將異常的 JSON 結構轉換回預期的【施工類別 -> 型號 -> 編號】結構"""
+    standard_cats = ["粗車", "再生", "精車", "軸位粗車", "軸位再生", "軸位精車", "圓度", "軸位數量"]
+    
+    # 如果最外層已包含標準施工項目，代表格式正確，直接回傳
+    if any(cat in parsed_data for cat in standard_cats):
+        return parsed_data
+        
+    # 若被包在根節點下，先提出內部資料
+    raw_data = parsed_data
+    if "軋輥維修報表" in parsed_data:
+        raw_data = parsed_data["軋輥維修報表"]
+    elif len(parsed_data) == 1:
+        first_key = list(parsed_data.keys())[0]
+        raw_data = parsed_data[first_key]
+
+    normalized = {cat: {} for cat in standard_cats}
+    
+    # 進行結構轉置：raw_data[型號][編號][施工項目] -> normalized[施工項目][型號][編號]
+    if isinstance(raw_data, dict):
+        for model, rollers in raw_data.items():
+            if not isinstance(rollers, dict): 
+                continue
+            for r_id, operations in rollers.items():
+                if not isinstance(operations, dict): 
+                    continue
+                for op_name, value in operations.items():
+                    if op_name in normalized:
+                        if model not in normalized[op_name]:
+                            normalized[op_name][model] = {}
+                        normalized[op_name][model][r_id] = str(value)
+                    
+    return normalized
 
 @app.post("/api/ocr")
 async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
@@ -266,7 +300,12 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
                 raw_text = raw_text[4:]
             raw_text = raw_text.strip()
 
+        # 原本的 JSON 解析
         parsed = json.loads(raw_text)
+        
+        # 【新增這行】進行格式正規化修復
+        parsed = normalize_parsed_data(parsed)
+
         return JSONResponse(content=parsed)
 
     except json.JSONDecodeError:
