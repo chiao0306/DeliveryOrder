@@ -214,7 +214,7 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
 
     b64_data = base64.b64encode(content).decode("utf-8")
 
-    prompt = \"\"\"
+    prompt = """
 你是工廠軋輥維修報表的資料擷取助手。
 請分析這張「軋輥組裝報表」圖片，依照以下規則輸出 JSON：
 
@@ -236,7 +236,7 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
 7. 【重要】若遇到「重複的輥輪編號」（也就是同一個編號在表中出現兩次以上），請務必在 JSON 的編號後方加上底線與流水號（例如遇到兩筆 ABC01，請輸出 "ABC01_1", "ABC01_2"），確保鍵值（Key）唯一，否則資料會被覆蓋遺失。此規則適用所有欄位。
 
 請直接直接輸出 JSON，不要加 markdown 代碼區塊。
-    \"\"\".strip()
+    """.strip()
 
     payload = {
         "contents": [
