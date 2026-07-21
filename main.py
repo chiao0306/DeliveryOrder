@@ -164,7 +164,7 @@ class ExcelReportGenerator:
         self.fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         self.align_center = Alignment(horizontal="center", vertical="center")
         
-        # 定義一般細框線
+         # 定義一般細框線
         self.border_thin = Border(
             left=Side(style='thin', color='D5D8DC'), right=Side(style='thin', color='D5D8DC'),
             top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
@@ -176,6 +176,18 @@ class ExcelReportGenerator:
             right=Side(style='medium', color='000000'), 
             top=Side(style='thin', color='D5D8DC'), 
             bottom=Side(style='thin', color='D5D8DC')
+        )
+
+        # 【新增】下方加粗的框線（用於施工項目區塊底部的橫線）
+        self.border_bottom_thick = Border(
+            left=Side(style='thin', color='D5D8DC'), right=Side(style='thin', color='D5D8DC'),
+            top=Side(style='thin', color='D5D8DC'), bottom=Side(style='medium', color='000000')
+        )
+
+        # 【新增】右側與下方皆加粗的框線（用於交界處的單元格）
+        self.border_both_thick = Border(
+            left=Side(style='thin', color='D5D8DC'), right=Side(style='medium', color='000000'),
+            top=Side(style='thin', color='D5D8DC'), bottom=Side(style='medium', color='000000')
         )
 
     def _setup_headers(self):
@@ -227,6 +239,7 @@ class ExcelReportGenerator:
                 
             model_dict = self.parsed_data[json_cat]
             is_first_cat_row = True
+            cat_start_row = current_row  # 記錄當前施工項目的起始列
             
             for model, rollers in model_dict.items():
                 if not rollers:
@@ -252,7 +265,6 @@ class ExcelReportGenerator:
                     
                     for col in range(1, 31):
                         c = self.ws.cell(row=current_row, column=col)
-                        # 資料列也同步套用加粗框線以維持整齊對齊
                         if col in [2, 6, 10, 14, 18, 22, 26, 30]:
                             c.border = self.border_right_thick
                         else:
@@ -310,6 +322,16 @@ class ExcelReportGenerator:
                         self.ws.merge_cells(start_row=current_row, start_column=empty_col_val, end_row=current_row, end_column=empty_col_val+1)
 
                     current_row += 1
+            
+            # 【新增】當前施工項目所有資料行皆寫入完畢後，將最後一行的底部加上粗橫線
+            if current_row > cat_start_row:
+                last_data_row = current_row - 1
+                for col in range(1, 31):
+                    cell = self.ws.cell(row=last_data_row, column=col)
+                    if col in [2, 6, 10, 14, 18, 22, 26, 30]:
+                        cell.border = self.border_both_thick
+                    else:
+                        cell.border = self.border_bottom_thick
 
     def _auto_fit_columns(self):
         for col in self.ws.columns:
