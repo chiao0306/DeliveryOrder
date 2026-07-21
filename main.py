@@ -116,11 +116,9 @@ class ReportDataProcessor:
         return text.strip()
 
     def _normalize(self, parsed_data: dict) -> dict:
-        # 如果最外層已包含標準施工項目，代表格式正確，直接回傳
         if any(cat in parsed_data for cat in self.standard_cats):
             return parsed_data
             
-        # 若被包在根節點下，先提出內部資料
         raw_data = parsed_data
         if "軋輥維修報表" in parsed_data:
             raw_data = parsed_data["軋輥維修報表"]
@@ -130,7 +128,6 @@ class ReportDataProcessor:
 
         normalized = {cat: {} for cat in self.standard_cats}
         
-        # 進行結構轉置：raw_data[型號][編號][施工項目] -> normalized[施工項目][型號][編號]
         if isinstance(raw_data, dict):
             for model, rollers in raw_data.items():
                 if not isinstance(rollers, dict): 
@@ -166,9 +163,19 @@ class ExcelReportGenerator:
         self.fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
         self.fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         self.align_center = Alignment(horizontal="center", vertical="center")
+        
+        # 定義一般細框線
         self.border_thin = Border(
             left=Side(style='thin', color='D5D8DC'), right=Side(style='thin', color='D5D8DC'),
             top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
+        )
+        
+        # 定義右側加粗的框線（用於區隔不同的施工項目）
+        self.border_right_thick = Border(
+            left=Side(style='thin', color='D5D8DC'), 
+            right=Side(style='medium', color='000000'), 
+            top=Side(style='thin', color='D5D8DC'), 
+            bottom=Side(style='thin', color='D5D8DC')
         )
 
     def _setup_headers(self):
@@ -176,7 +183,12 @@ class ExcelReportGenerator:
             cell = self.ws.cell(row=1, column=col)
             cell.font = self.font_header
             cell.alignment = self.align_center
-            cell.border = self.border_thin
+            
+            # 針對特定欄位（型號及每 4 欄為一組的結尾）應用加粗右側框線
+            if col in [2, 6, 10, 14, 18, 22, 26, 30]:
+                cell.border = self.border_right_thick
+            else:
+                cell.border = self.border_thin
 
         self.ws.cell(row=1, column=1, value="施工項目").fill = self.fill_header_main
         self.ws.cell(row=1, column=2, value="型號").fill = self.fill_header_main
@@ -240,7 +252,11 @@ class ExcelReportGenerator:
                     
                     for col in range(1, 31):
                         c = self.ws.cell(row=current_row, column=col)
-                        c.border = self.border_thin
+                        # 資料列也同步套用加粗框線以維持整齊對齊
+                        if col in [2, 6, 10, 14, 18, 22, 26, 30]:
+                            c.border = self.border_right_thick
+                        else:
+                            c.border = self.border_thin
                     
                     cell_a = self.ws.cell(row=current_row, column=1)
                     if is_first_cat_row:
@@ -346,11 +362,9 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
     content = await file.read()
     
     try:
-        # 1. 啟動 OCR 辨識模組
         recognizer = ReportOCRRecognizer(api_key=GEMINI_API_KEY, model=model)
         raw_text = recognizer.analyze(content, file.filename)
         
-        # 2. 啟動資料清洗與轉換模組
         processor = ReportDataProcessor()
         normalized_data = processor.process(raw_text)
 
@@ -364,7 +378,6 @@ async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
 @app.post("/api/export-excel")
 async def export_excel(data: Dict[str, Any]):
     try:
-        # 3. 啟動 Excel 報表產出模組
         generator = ExcelReportGenerator(data)
         excel_file = generator.export()
         
