@@ -163,44 +163,34 @@ class ExcelReportGenerator:
         self.fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
         self.fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         self.align_center = Alignment(horizontal="center", vertical="center")
-        
-         # 定義一般細框線
-        self.border_thin = Border(
-            left=Side(style='thin', color='D5D8DC'), right=Side(style='thin', color='D5D8DC'),
-            top=Side(style='thin', color='D5D8DC'), bottom=Side(style='thin', color='D5D8DC')
-        )
-        
-        # 定義右側加粗的框線（用於區隔不同的施工項目）
-        self.border_right_thick = Border(
-            left=Side(style='thin', color='D5D8DC'), 
-            right=Side(style='medium', color='000000'), 
-            top=Side(style='thin', color='D5D8DC'), 
-            bottom=Side(style='thin', color='D5D8DC')
-        )
 
-        # 【新增】下方加粗的框線（用於施工項目區塊底部的橫線）
-        self.border_bottom_thick = Border(
-            left=Side(style='thin', color='D5D8DC'), right=Side(style='thin', color='D5D8DC'),
-            top=Side(style='thin', color='D5D8DC'), bottom=Side(style='medium', color='000000')
-        )
-
-        # 【新增】右側與下方皆加粗的框線（用於交界處的單元格）
-        self.border_both_thick = Border(
-            left=Side(style='thin', color='D5D8DC'), right=Side(style='medium', color='000000'),
-            top=Side(style='thin', color='D5D8DC'), bottom=Side(style='medium', color='000000')
-        )
+    def _get_border(self, col: int, is_last_row: bool = False) -> Border:
+        """動態產生框線，自動消除合併儲存格的內部線殘影，並加上特定粗線"""
+        left = Side(style='thin', color='D5D8DC')
+        right = Side(style='thin', color='D5D8DC')
+        top = Side(style='thin', color='D5D8DC')
+        bottom = Side(style='medium', color='000000') if is_last_row else Side(style='thin', color='D5D8DC')
+        
+        # 處理合併儲存格：第3欄以後，每兩欄為一個合併單元(3-4為編號, 5-6為尺寸)
+        # 將內部的框線設為 None，避免在底部粗線上產生「凸出來一根根」的殘影
+        if col >= 3:
+            if col % 2 == 1:  # 單數欄 (3, 5, 7...) 是合併儲存格的左半邊，清空右框線
+                right = Side(border_style=None)
+            else:             # 雙數欄 (4, 6, 8...) 是合併儲存格的右半邊，清空左框線
+                left = Side(border_style=None)
+                
+        # 針對 型號(2) 及 每個完整施工項目的結尾(6, 10, 14, 18, 22, 26, 30) 加上右側粗直線
+        if col in [2, 6, 10, 14, 18, 22, 26, 30]:
+            right = Side(style='medium', color='000000')
+            
+        return Border(left=left, right=right, top=top, bottom=bottom)
 
     def _setup_headers(self):
         for col in range(1, 31):
             cell = self.ws.cell(row=1, column=col)
             cell.font = self.font_header
             cell.alignment = self.align_center
-            
-            # 針對特定欄位（型號及每 4 欄為一組的結尾）應用加粗右側框線
-            if col in [2, 6, 10, 14, 18, 22, 26, 30]:
-                cell.border = self.border_right_thick
-            else:
-                cell.border = self.border_thin
+            cell.border = self._get_border(col, is_last_row=False)
 
         self.ws.cell(row=1, column=1, value="施工項目").fill = self.fill_header_main
         self.ws.cell(row=1, column=2, value="型號").fill = self.fill_header_main
@@ -239,7 +229,7 @@ class ExcelReportGenerator:
                 
             model_dict = self.parsed_data[json_cat]
             is_first_cat_row = True
-            cat_start_row = current_row  # 記錄當前施工項目的起始列
+            cat_start_row = current_row 
             
             for model, rollers in model_dict.items():
                 if not rollers:
@@ -265,10 +255,7 @@ class ExcelReportGenerator:
                     
                     for col in range(1, 31):
                         c = self.ws.cell(row=current_row, column=col)
-                        if col in [2, 6, 10, 14, 18, 22, 26, 30]:
-                            c.border = self.border_right_thick
-                        else:
-                            c.border = self.border_thin
+                        c.border = self._get_border(col, is_last_row=False)
                     
                     cell_a = self.ws.cell(row=current_row, column=1)
                     if is_first_cat_row:
@@ -323,15 +310,12 @@ class ExcelReportGenerator:
 
                     current_row += 1
             
-            # 【新增】當前施工項目所有資料行皆寫入完畢後，將最後一行的底部加上粗橫線
+            # 在大項目結束時，將最後一列的底部設為粗線
             if current_row > cat_start_row:
                 last_data_row = current_row - 1
                 for col in range(1, 31):
                     cell = self.ws.cell(row=last_data_row, column=col)
-                    if col in [2, 6, 10, 14, 18, 22, 26, 30]:
-                        cell.border = self.border_both_thick
-                    else:
-                        cell.border = self.border_bottom_thick
+                    cell.border = self._get_border(col, is_last_row=True)
 
     def _auto_fit_columns(self):
         for col in self.ws.columns:
