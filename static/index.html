@@ -4,11 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini OCR 測試</title>
-    <link href="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css)" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { padding: 20px; background-color: #f8f9fa; font-family: "Microsoft JhengHei", sans-serif; }
         .container { max-width: 800px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
         #result { display: none; margin-top: 20px; }
+        
+        /* 拖曳區塊樣式 */
+        .drop-zone {
+            border: 2px dashed #0d6efd;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background-color: #f8f9fa;
+            cursor: pointer;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .drop-zone.dragover {
+            background-color: #e2eefd;
+            border-color: #0a58ca;
+        }
+        .drop-zone:hover {
+            background-color: #e9ecef;
+        }
     </style>
 </head>
 <body>
@@ -23,10 +41,16 @@
                     <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
                 </select>
             </div>
-            <div class="mb-3">
+            
+            <!-- 修改後的拖曳與貼上區塊 -->
+            <div class="mb-4">
                 <label class="form-label fw-bold">上傳報表圖檔 (jpg, png, pdf)</label>
-                <input class="form-control" type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png,.pdf" required>
+                <div id="dropZone" class="drop-zone">
+                    <span id="dropZoneText" class="text-primary fw-bold">點擊選擇檔案、拖曳檔案至此，或直接 Ctrl+V 貼上圖片</span>
+                    <input class="d-none" type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png,.pdf" required>
+                </div>
             </div>
+
             <button type="submit" class="btn btn-primary w-100" id="submitBtn">開始辨識</button>
         </form>
 
@@ -47,16 +71,76 @@
 
     <script>
         let parsedData = null;
+        
+        // 拖曳與貼上功能邏輯
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const dropZoneText = document.getElementById('dropZoneText');
 
+        // 點擊觸發檔案選擇
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 檔案選擇變更時更新顯示文字
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                dropZoneText.innerHTML = `已選擇檔案：<br><span class="text-dark">${this.files[0].name}</span>`;
+            }
+        });
+
+        // 拖曳事件處理
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                // 觸發 change 事件以更新檔名顯示
+                const event = new Event('change');
+                fileInput.dispatchEvent(event);
+            }
+        });
+
+        // 全域 Ctrl+V 貼上事件處理
+        document.addEventListener('paste', (e) => {
+            if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+                // 檢查是否為支援的格式
+                const file = e.clipboardData.files[0];
+                const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
+                
+                if (validTypes.includes(file.type)) {
+                    fileInput.files = e.clipboardData.files;
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                } else {
+                    alert('貼上的檔案格式不支援，請使用 jpg, png 或 pdf。');
+                }
+            }
+        });
+
+        // 原有表單提交邏輯
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const fileInput = document.getElementById('fileInput');
             const modelSelect = document.getElementById('modelSelect');
             const btn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
             const resultDiv = document.getElementById('result');
 
-            if (!fileInput.files.length) return;
+            if (!fileInput.files.length) {
+                alert('請先選擇或貼上檔案！');
+                return;
+            }
 
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
@@ -85,6 +169,7 @@
             }
         });
 
+        // 原有結果渲染邏輯
         function renderResults(data) {
             document.getElementById('jsonResult').textContent = JSON.stringify(data, null, 2);
             const accordion = document.getElementById('accordionResult');
@@ -103,7 +188,7 @@
                         contentHtml += `<strong>🔹 型號：${rType}</strong><br>`;
                         for (const [rId, size] of Object.entries(rollers)) {
                             const displayId = rId.split('_')[0];
-                            contentHtml += `　- <code>${displayId}</code> → <strong>${size}</strong><br>`;
+                            contentHtml += ` - <code>${displayId}</code> → <strong>${size}</strong><br>`;
                         }
                     }
                 }
@@ -129,6 +214,7 @@
             });
         }
 
+        // 原有 Excel 下載邏輯
         document.getElementById('downloadBtn').addEventListener('click', async () => {
             if (!parsedData) return;
             
@@ -155,6 +241,6 @@
             }
         });
     </script>
-    <script src="[https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js](https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
