@@ -27,6 +27,14 @@
         .drop-zone:hover {
             background-color: #e9ecef;
         }
+        .file-item {
+            display: inline-block;
+            background: #e9ecef;
+            padding: 4px 10px;
+            border-radius: 4px;
+            margin: 3px;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -37,17 +45,20 @@
             <div class="mb-3">
                 <label class="form-label fw-bold">Gemini 模型</label>
                 <select class="form-select" id="modelSelect" name="model">
-                    <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                 </select>
             </div>
             
-            <!-- 修改後的拖曳與貼上區塊 -->
+            <!-- 拖曳與貼上區塊（支援多檔案） -->
             <div class="mb-4">
-                <label class="form-label fw-bold">上傳報表圖檔 (jpg, png, pdf)</label>
+                <label class="form-label fw-bold">上傳報表圖檔 (支援單張或多張跨頁：jpg, png, pdf)</label>
                 <div id="dropZone" class="drop-zone">
-                    <span id="dropZoneText" class="text-primary fw-bold">點擊選擇檔案、拖曳檔案至此，或直接 Ctrl+V 貼上圖片</span>
-                    <input class="d-none" type="file" id="fileInput" name="file" accept=".jpg,.jpeg,.png,.pdf" required>
+                    <div id="dropZoneText" class="text-primary fw-bold">
+                        點擊選擇檔案（可按住 Ctrl 多選）、拖曳多張檔案至此，或直接 Ctrl+V 連續貼上圖片
+                    </div>
+                    <!-- 加上 multiple 屬性 -->
+                    <input class="d-none" type="file" id="fileInput" name="files" accept=".jpg,.jpeg,.png,.pdf" multiple>
                 </div>
             </div>
 
@@ -56,7 +67,7 @@
 
         <div id="loading" class="text-center mt-4" style="display: none;">
             <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 text-primary fw-bold">使用 Gemini 辨識中...</p>
+            <p class="mt-2 text-primary fw-bold" id="loadingText">使用 Gemini 同時辨識多頁報表中...</p>
         </div>
 
         <div id="result">
@@ -71,21 +82,46 @@
 
     <script>
         let parsedData = null;
+        // 使用陣列管理多個選取/貼上的檔案
+        let selectedFiles = [];
         
-        // 拖曳與貼上功能邏輯
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
         const dropZoneText = document.getElementById('dropZoneText');
+
+        // 更新介面上的檔案列表顯示
+        function updateFileListDisplay() {
+            if (selectedFiles.length === 0) {
+                dropZoneText.innerHTML = `點擊選擇檔案（可按住 Ctrl 多選）、拖曳多張檔案至此，或直接 Ctrl+V 連續貼上圖片`;
+            } else {
+                let html = `<div class="text-dark"><strong>已選取 ${selectedFiles.length} 個檔案（將合併辨識）：</strong><br><div class="mt-2">`;
+                selectedFiles.forEach((file, index) => {
+                    html += `<span class="file-item">第 ${index + 1} 頁：${file.name}</span>`;
+                });
+                html += `</div><div class="mt-3"><button type="button" class="btn btn-sm btn-outline-danger" id="clearFilesBtn">清除重選</button></div></div>`;
+                dropZoneText.innerHTML = html;
+
+                document.getElementById('clearFilesBtn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectedFiles = [];
+                    fileInput.value = '';
+                    updateFileListDisplay();
+                });
+            }
+        }
 
         // 點擊觸發檔案選擇
         dropZone.addEventListener('click', () => {
             fileInput.click();
         });
 
-        // 檔案選擇變更時更新顯示文字
+        // 檔案選擇變更（累加至陣列）
         fileInput.addEventListener('change', function() {
             if (this.files && this.files.length > 0) {
-                dropZoneText.innerHTML = `已選擇檔案：<br><span class="text-dark">${this.files[0].name}</span>`;
+                for (let i = 0; i < this.files.length; i++) {
+                    selectedFiles.push(this.files[i]);
+                }
+                updateFileListDisplay();
             }
         });
 
@@ -105,48 +141,60 @@
             dropZone.classList.remove('dragover');
             
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                fileInput.files = e.dataTransfer.files;
-                // 觸發 change 事件以更新檔名顯示
-                const event = new Event('change');
-                fileInput.dispatchEvent(event);
+                for (let i = 0; i < e.dataTransfer.files.length; i++) {
+                    selectedFiles.push(e.dataTransfer.files[i]);
+                }
+                updateFileListDisplay();
             }
         });
 
-        // 全域 Ctrl+V 貼上事件處理
+        // 全域 Ctrl+V 貼上事件處理（支援連續貼上第 1 頁、第 2 頁截圖）
         document.addEventListener('paste', (e) => {
             if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
-                // 檢查是否為支援的格式
-                const file = e.clipboardData.files[0];
                 const validTypes = ['image/jpeg', 'image/png', 'application/pdf'];
-                
-                if (validTypes.includes(file.type)) {
-                    fileInput.files = e.clipboardData.files;
-                    const event = new Event('change');
-                    fileInput.dispatchEvent(event);
+                let added = false;
+
+                for (let i = 0; i < e.clipboardData.files.length; i++) {
+                    const file = e.clipboardData.files[i];
+                    if (validTypes.includes(file.type)) {
+                        const ext = file.type === 'image/png' ? 'png' : (file.type === 'application/pdf' ? 'pdf' : 'jpg');
+                        const namedFile = new File([file], `截圖_第${selectedFiles.length + 1}頁.${ext}`, { type: file.type });
+                        selectedFiles.push(namedFile);
+                        added = true;
+                    }
+                }
+
+                if (added) {
+                    updateFileListDisplay();
                 } else {
                     alert('貼上的檔案格式不支援，請使用 jpg, png 或 pdf。');
                 }
             }
         });
 
-        // 原有表單提交邏輯
+        // 表單提交邏輯
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const modelSelect = document.getElementById('modelSelect');
             const btn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
+            const loadingText = document.getElementById('loadingText');
             const resultDiv = document.getElementById('result');
 
-            if (!fileInput.files.length) {
-                alert('請先選擇或貼上檔案！');
+            if (selectedFiles.length === 0) {
+                alert('請先選擇、拖曳或貼上至少一張報表圖檔！');
                 return;
             }
 
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
+            // 將所有檔案放入 formData 中，名稱為 files
+            selectedFiles.forEach((file) => {
+                formData.append('files', file);
+            });
             formData.append('model', modelSelect.value);
 
             btn.disabled = true;
+            loadingText.textContent = `使用 Gemini 同時辨識 ${selectedFiles.length} 頁報表中...`;
             loading.style.display = 'block';
             resultDiv.style.display = 'none';
 
@@ -169,7 +217,7 @@
             }
         });
 
-        // 原有結果渲染邏輯
+        // 結果渲染邏輯
         function renderResults(data) {
             document.getElementById('jsonResult').textContent = JSON.stringify(data, null, 2);
             const accordion = document.getElementById('accordionResult');
@@ -214,7 +262,7 @@
             });
         }
 
-        // 原有 Excel 下載邏輯
+        // Excel 下載邏輯
         document.getElementById('downloadBtn').addEventListener('click', async () => {
             if (!parsedData) return;
             
