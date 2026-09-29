@@ -12,20 +12,22 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 
 # ==========================================
-# 模組 1：影像辨識模組
+# 模組 1：影像辨識模組（支援多圖/跨頁）
 # ==========================================
 class ReportOCRRecognizer:
-    """處理圖檔與 Gemini API 溝通的 OCR 辨識模組"""
+    """處理圖檔與 Gemini API 溝通的 OCR 辨識模組，支援多頁/多張圖片合併分析"""
 
     PROMPT = """
 你是工廠軋輥維修報表的資料擷取助手。
-請分析這張「軋輥組裝報表」圖片，依照以下規則輸出 JSON：
+請分析這份「軋輥組裝報表」圖片（可能包含第 1 頁、第 2 頁等多頁連續報表，請依序合併解析）。
+依照以下規則輸出單一整合的 JSON：
 
 規則：
 1. 掃描每一筆軋輥記錄（每一列）。注意報表中有區段標示不同的「輥輪型號」（例如 30D, 30S, 30L, 200, 170）。
+   【特別注意跨頁情況】：若表格跨頁（例如前一頁末尾與下一頁開頭屬於同一型號），請將所有記錄合併至該型號底下。
 2. 欄位對應如下：
    - 粗車（Roll 粗車尺寸，非軸位）
    - 再生（Roll 再生尺寸）
@@ -41,7 +43,7 @@ class ReportOCRRecognizer:
 6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸或數量】。
 7. 【重要】若遇到「重複的輥輪編號」（也就是同一個編號在表中出現兩次以上），請務必在 JSON 的編號後方加上底線與流水號（例如遇到兩筆 ABC01，請輸出 "ABC01_1", "ABC01_2"），確保鍵值（Key）唯一，否則資料會被覆蓋遺失。此規則適用所有欄位。
 
-請直接直接輸出 JSON，不要加 markdown 代碼區塊。
+請直接輸出 JSON，不要加 markdown 代碼區塊。
     """.strip()
 
     def __init__(self, api_key: str, model: str):
@@ -62,14 +64,20 @@ class ReportOCRRecognizer:
     def _encode_image(self, file_content: bytes) -> str:
         return base64.b64encode(file_content).decode("utf-8")
 
-    def _build_payload(self, mime_type: str, b64_data: str) -> dict:
+    def _build_payload(self, files: List[Tuple[bytes, str]]) -> dict:
+        parts = []
+        # 將所有頁面的圖片依序加入 payload 中
+        for content, filename in files:
+            mime_type = self._get_mime_type(filename)
+            b64_data = self._encode_image(content)
+            parts.append({"inline_data": {"mime_type": mime_type, "data": b64_data}})
+
+        parts.append({"text": self.PROMPT})
+
         return {
             "contents": [
                 {
-                    "parts": [
-                        {"inline_data": {"mime_type": mime_type, "data": b64_data}},
-                        {"text": self.PROMPT},
-                    ]
+                    "parts": parts
                 }
             ],
             "generationConfig": {
@@ -77,20 +85,22 @@ class ReportOCRRecognizer:
             },
         }
 
-    def analyze(self, file_content: bytes, filename: str) -> str:
-        mime_type = self._get_mime_type(filename)
-        b64_data = self._encode_image(file_content)
-        payload = self._build_payload(mime_type, b64_data)
+    def analyze(self, files: List[Tuple[bytes, str]]) -> str:
+        payload = self._build_payload(files)
 
         resp = requests.post(
             self.api_url,
             headers={"Content-Type": "application/json"},
             json=payload,
-            timeout=120,
+            timeout=180,
         )
         resp.raise_for_status()
 
-        raw_text = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+        candidates = resp.json().get("candidates", [{}])
+        if not candidates:
+            raise ValueError("Gemini 未返回任何內容。")
+            
+        raw_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
         return raw_text
 
 # ==========================================
@@ -103,7 +113,6 @@ class ReportDataProcessor:
         self.standard_cats = ["粗車", "再生", "精車", "軸位粗車", "軸位再生", "軸位精車", "圓度", "軸位數量"]
 
     def process(self, raw_text: str) -> dict:
-        """主入口：執行清洗、解析與轉置"""
         clean_text = self._strip_markdown(raw_text)
         parsed_data = json.loads(clean_text)
         return self._normalize(parsed_data)
@@ -327,15 +336,23 @@ async def root():
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 @app.post("/api/ocr")
-async def analyze_ocr(file: UploadFile = File(...), model: str = Form(...)):
+async def analyze_ocr(files: List[UploadFile] = File(...), model: str = Form(...)):
+    """支援單張或多張報表圖片同時辨識"""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="未設定 GEMINI_API_KEY 環境變數。")
 
-    content = await file.read()
+    if not files:
+        raise HTTPException(status_code=400, detail="請至少上傳一張報表圖片。")
+
+    # 依序讀取所有檔案內容
+    file_tuples = []
+    for file in files:
+        content = await file.read()
+        file_tuples.append((content, file.filename))
     
     try:
         recognizer = ReportOCRRecognizer(api_key=GEMINI_API_KEY, model=model)
-        raw_text = recognizer.analyze(content, file.filename)
+        raw_text = recognizer.analyze(file_tuples)
         
         processor = ReportDataProcessor()
         normalized_data = processor.process(raw_text)
