@@ -225,8 +225,8 @@
             document.getElementById('jsonResult').textContent = JSON.stringify(data, null, 2);
             const accordion = document.getElementById('accordionResult');
             accordion.innerHTML = '';
-            const categories = ["粗車", "再生", "精車", "軸位粗車", "軸位再生", "軸位精車", "圓度"];
-            
+            const categories = ["圓度", "再生", "軸位再生", "粗車", "軸位粗車", "精車", "軸位精車"];
+
             categories.forEach((cat, index) => {
                 const typesDict = data[cat] || {};
                 let totalCount = 0;
