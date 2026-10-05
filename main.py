@@ -66,7 +66,6 @@ class ReportOCRRecognizer:
 
     def _build_payload(self, files: List[Tuple[bytes, str]]) -> dict:
         parts = []
-        # 將所有頁面的圖片依序加入 payload 中
         for content, filename in files:
             mime_type = self._get_mime_type(filename)
             b64_data = self._encode_image(content)
@@ -172,6 +171,8 @@ class ExcelReportGenerator:
         self.fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
         self.fill_yellow = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
         self.align_center = Alignment(horizontal="center", vertical="center")
+        
+        self.category_end_rows: List[int] = []
 
     def _setup_headers(self):
         for col in range(1, 31):
@@ -197,18 +198,20 @@ class ExcelReportGenerator:
             for c in range(col_val, col_val + 2):
                 self.ws.cell(row=1, column=c).fill = current_pair_fill
 
-    def _write_data(self):
+    def _write_data(self) -> int:
+        # 1. 將「真圓度」調整為第一個項目
         categories_order = [
+            ("真圓度", "圓度"),
             ("本體銲補", "再生"),
             ("軸頸銲補", "軸位再生"),
             ("本體未再生車修", "粗車"),
             ("軸頸未再生車修", "軸位粗車"),
             ("本體再生車修", "精車"),
-            ("軸頸再生車修", "軸位精車"),
-            ("真圓度", "圓度")
+            ("軸頸再生車修", "軸位精車")
         ]
 
         current_row = 2
+        self.category_end_rows = []
 
         for display_cat, json_cat in categories_order:
             if json_cat not in self.parsed_data or not self.parsed_data[json_cat]:
@@ -216,6 +219,7 @@ class ExcelReportGenerator:
                 
             model_dict = self.parsed_data[json_cat]
             is_first_cat_row = True
+            cat_start_row = current_row
             
             for model, rollers in model_dict.items():
                 if not rollers:
@@ -292,6 +296,35 @@ class ExcelReportGenerator:
 
                     current_row += 1
 
+            # 記錄該施工項目的結束列位置（用於繪製底部隔線）
+            if current_row > cat_start_row:
+                self.category_end_rows.append(current_row - 1)
+
+        return current_row - 1
+
+    def _apply_borders(self, max_row: int):
+        """為整個表格區域添加最外框線，並在各施工項目間添加分隔線"""
+        thin_border = Side(style='thin', color='000000')
+        medium_border = Side(style='medium', color='000000')
+
+        for r in range(1, max_row + 1):
+            for c in range(1, 31):
+                cell = self.ws.cell(row=r, column=c)
+
+                # 判定最外框線（上、下、左、右邊緣）
+                top = medium_border if r == 1 else None
+                bottom = medium_border if r == max_row else None
+                left = medium_border if c == 1 else None
+                right = medium_border if c == 30 else None
+
+                # 施工項目分隔線與表頭底線
+                if r == 1:
+                    bottom = thin_border
+                elif r in self.category_end_rows and r != max_row:
+                    bottom = thin_border
+
+                cell.border = Border(top=top, bottom=bottom, left=left, right=right)
+
     def _auto_fit_columns(self):
         for col in self.ws.columns:
             max_width = 0
@@ -314,7 +347,8 @@ class ExcelReportGenerator:
 
     def export(self) -> io.BytesIO:
         self._setup_headers()
-        self._write_data()
+        max_row = self._write_data()
+        self._apply_borders(max_row)
         self._auto_fit_columns()
         
         output = io.BytesIO()
@@ -344,7 +378,6 @@ async def analyze_ocr(files: List[UploadFile] = File(...), model: str = Form(...
     if not files:
         raise HTTPException(status_code=400, detail="請至少上傳一張報表圖片。")
 
-    # 依序讀取所有檔案內容
     file_tuples = []
     for file in files:
         content = await file.read()
