@@ -5,6 +5,7 @@ import re
 import requests
 import io
 import openpyxl
+from dotenv import load_dotenv
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
@@ -434,6 +435,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def root():
     return RedirectResponse(url="/static/index.html")
 
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 @app.post("/api/ocr")
