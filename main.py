@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import re
 import requests
 import io
 import openpyxl
@@ -12,7 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Literal, Tuple
 
 # ==========================================
 # 模組 1：影像辨識模組（支援多圖/跨頁）
@@ -21,42 +22,39 @@ class ReportOCRRecognizer:
     """處理圖檔與 Gemini API 溝通的 OCR 辨識模組，支援多頁/多張圖片合併分析"""
 
     PROMPT = """
-你是工廠軋輥維修報表的資料擷取助手。
-請分析這份「軋輥組裝報表」圖片（可能包含第 1 頁、第 2 頁等多頁連續報表，請依序合併解析）。
-依照以下規則輸出單一整合的 JSON：
+你是工廠軋輥維修報表的資料擷取助手。請依照上傳順序分析「軋輥組裝報表」圖片，可能包含多頁連續報表。
 
-規則：
-1. 掃描每一筆軋輥記錄（每一列）。報表可能是旋轉（橫放）的，請先在腦中轉正再閱讀。
-   【輥輪型號判讀—務必遵守】：輥輪型號「不是」輥輪編號，絕對不可把輥輪編號（例如 29DL143、29D116）當成型號。型號只能取自獨立的「輥輪型號：」列（冒號後的文字，例如 295、29D、29X、29L）。
-   該「輥輪型號：」列位於它所屬資料列的「正下方」（是該段的結尾，不是開頭）：它上方、直到前一個「輥輪型號：」列（或表頭）之後的所有輥輪記錄，全部屬於這個型號。即使某段只有一筆記錄，也要使用它正下方的「輥輪型號：」。
-   例如：12 筆記錄 → 「輥輪型號：295」→ 1 筆 29DL143 → 「輥輪型號：29D」→ 12 筆 29S53… → 「輥輪型號：29X」→ 2 筆 29D116、29D01 → 「輥輪型號：29L」，則 29DL143 屬於 29D，29S53… 屬於 29X，29D116、29D01 屬於 29L。
-   該型號列與「輥輪總計」列是段落標記，不是輥輪資料，不能當成編號或尺寸輸出。
-   若文字模糊，優先依照「輥輪型號：」後的實際標示辨識；不可依輥輪編號前綴、日期、尺寸、區段先後順序或常見型號自行猜測。無法辨識時仍以最接近的可讀標示為準，不要憑空建立新型號。
-   【特別注意跨頁情況】：若表格跨頁（例如前一頁末尾與下一頁開頭屬於同一型號），請將所有記錄合併至該型號底下。
-2. 欄位對應如下：
-   - 粗車（Roll 粗車尺寸，非軸位）
-   - 再生（Roll 再生尺寸）
-   - 精車（Roll 精車尺寸）
-   - 軸位粗車（軸位粗車尺寸）
-   - 軸位再生（軸位再生尺寸）
-   - 軸位精車（軸位精車尺寸）
-   - 圓度（對應表上最右側的「圓度」數值）
-   - 軸位數量（對應表上的「軸位數量」欄位，若出現數字「2」請務必記錄）
-3. 若該格為數字（含小數），代表有施做，請記錄該數字（字串格式）。
-4. 若該格為「X」或空白，代表未施做，請略過（不要包含在輸出中）。
-5. 每個類別只輸出「有施做」的項目。
-6. JSON 結構必須為三層：【施工類別】 -> 【輥輪型號】 -> 【輥輪編號: 尺寸或數量】。
-7. 【重要】若遇到「重複的輥輪編號」（也就是同一個編號在表中出現兩次以上），請務必在 JSON 的編號後方加上底線與流水號（例如遇到兩筆 ABC01，請輸出 "ABC01_1", "ABC01_2"），確保鍵值（Key）唯一，否則資料會被覆蓋遺失。此規則適用所有欄位。
-8. 【忽略手寫內容】只讀取「印刷表格」內的資料。表格下方或空白處的手寫文字（例如備註、勾選、簽名、日期、手寫輥輪編號清單如 ①29DS10、②29DS175）、頁首手寫編號、箭頭修改（如 68→66）、圈選標記，一律忽略，不可輸出，也不可當成輥輪記錄。「車修數量、再生數量、拆裝數量、驅動拆裝」等統計列同樣不是輥輪資料，請略過。
+擷取規則：
+1. 只讀取印刷表格資料列。報表可能旋轉，請先辨認欄位方向。忽略手寫備註、勾選、簽名、日期、頁首手寫編號、箭頭修改、圈選，以及「車修數量、再生數量、拆裝數量、驅動拆裝」等統計列。
+2. 每筆實際輥輪資料列輸出一個 record，依圖片頁面及表格由上到下的順序排列。不可將一列拆開、合併、重排，或把某欄數值配到其他列。
+3. 輥輪型號只能取自印刷的「輥輪型號：」標記，不可從編號、日期、尺寸或常見型號推測。型號標記在一段資料列下方時，該標記代表它上方、前一個型號標記（或表頭/延續頁）之後的資料列。跨頁時延續前頁型號，除非看到新的型號標記。型號標記及「輥輪總計」列都不是資料列。
+4. 每筆 record 的 operations 必須逐欄抄錄以下所有欄位，不可分類整理或省略空格：
+   - 粗車：Roll 粗車尺寸，非軸位
+   - 再生：Roll 再生尺寸
+   - 精車：Roll 精車尺寸
+   - 軸位粗車：軸位粗車尺寸
+   - 軸位再生：軸位再生尺寸
+   - 軸位精車：軸位精車尺寸
+   - 圓度：表格最右側「圓度」
+   - 軸位數量：表格「軸位數量」
+5. 數值（含小數）以字串原樣輸出，保留前導零及小數位。X 輸出為 "X"，空白輸出為空字串 ""。不要把 X 或空白改成數字，也不要用相鄰格的值填補。
+6. 重複編號也要各自輸出一筆，不要自行加流水號；由程式處理重複鍵。
+7. 型號或編號模糊時，輸出最接近的可讀文字，不可憑空建立型號或編號。
 
-請直接輸出 JSON，不要加 markdown 代碼區塊。
+只輸出符合以下結構的 JSON，不要加 markdown：
+{"records":[{"model":"輥輪型號","id":"輥輪編號","operations":{"粗車":"數值或X或空字串","再生":"數值或X或空字串","精車":"數值或X或空字串","軸位粗車":"數值或X或空字串","軸位再生":"數值或X或空字串","軸位精車":"數值或X或空字串","圓度":"數值或X或空字串","軸位數量":"數值或X或空字串"}}]}
     """.strip()
 
-    def __init__(self, api_key: str, model: str):
+    THINKING_LEVELS = {"low", "medium", "high"}
+
+    def __init__(self, api_key: str, model: str, thinking_level: str = "medium"):
         if not api_key:
             raise ValueError("未設定 GEMINI_API_KEY 環境變數。")
+        if thinking_level not in self.THINKING_LEVELS:
+            raise ValueError("thinking level 必須是 low、medium 或 high。")
         self.api_key = api_key
         self.model = model
+        self.thinking_level = thinking_level
         self.api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
 
     def _get_mime_type(self, filename: str) -> str:
@@ -86,7 +84,7 @@ class ReportOCRRecognizer:
                 }
             ],
             "generationConfig": {
-                "thinkingConfig": {"thinkingLevel": "minimal"}
+                "thinkingConfig": {"thinkingLevel": self.thinking_level}
             },
         }
 
@@ -120,6 +118,10 @@ class ReportDataProcessor:
     def process(self, raw_text: str) -> dict:
         clean_text = self._strip_markdown(raw_text)
         parsed_data = json.loads(clean_text)
+        if not isinstance(parsed_data, dict):
+            raise ValueError("Gemini 回傳的 JSON 根節點必須是物件。")
+        if "records" in parsed_data:
+            return self._normalize_records(parsed_data["records"])
         return self._normalize(parsed_data)
 
     def _strip_markdown(self, text: str) -> str:
@@ -155,6 +157,65 @@ class ReportDataProcessor:
                                 normalized[op_name][model] = {}
                             normalized[op_name][model][r_id] = str(value)
                         
+        return normalized
+
+    def _normalize_records(self, records: Any) -> dict:
+        if not isinstance(records, list):
+            raise ValueError("Gemini 回傳的 records 必須是陣列。")
+        if not records:
+            raise ValueError("Gemini 未擷取到任何輥輪資料列。")
+
+        validated_records = []
+        duplicate_totals = {}
+        for index, record in enumerate(records, start=1):
+            if not isinstance(record, dict):
+                raise ValueError(f"第 {index} 筆 record 必須是物件。")
+
+            model = record.get("model")
+            roller_id = record.get("id")
+            operations = record.get("operations")
+            if not isinstance(model, str) or not model.strip():
+                raise ValueError(f"第 {index} 筆 record 缺少有效型號。")
+            if not isinstance(roller_id, str) or not roller_id.strip():
+                raise ValueError(f"第 {index} 筆 record 缺少有效編號。")
+            if not isinstance(operations, dict):
+                raise ValueError(f"第 {index} 筆 record 的 operations 必須是物件。")
+            missing_categories = set(self.standard_cats) - operations.keys()
+            if missing_categories:
+                missing = "、".join(sorted(missing_categories))
+                raise ValueError(f"第 {index} 筆 record 缺少欄位：{missing}。")
+
+            model = model.strip()
+            roller_id = roller_id.strip()
+            duplicate_key = (model, roller_id)
+            duplicate_totals[duplicate_key] = duplicate_totals.get(duplicate_key, 0) + 1
+            validated_records.append((model, roller_id, operations))
+
+        normalized = {cat: {} for cat in self.standard_cats}
+        duplicate_occurrences = {}
+        for model, roller_id, operations in validated_records:
+            duplicate_key = (model, roller_id)
+            if duplicate_totals[duplicate_key] > 1:
+                duplicate_occurrences[duplicate_key] = (
+                    duplicate_occurrences.get(duplicate_key, 0) + 1
+                )
+                normalized_id = f"{roller_id}_{duplicate_occurrences[duplicate_key]}"
+            else:
+                normalized_id = roller_id
+
+            for category in self.standard_cats:
+                value = operations.get(category, "")
+                if value is None:
+                    value = ""
+                if type(value) not in (str, int, float):
+                    raise ValueError(
+                        f"編號 {roller_id} 的「{category}」欄位必須是字串或數值。"
+                    )
+                value = str(value).strip()
+                if not value or value.upper() == "X":
+                    continue
+                normalized[category].setdefault(model, {})[normalized_id] = value
+
         return normalized
 
 # ==========================================
@@ -236,7 +297,7 @@ class ExcelReportGenerator:
                 qty_data = self.parsed_data.get("軸位數量", {}).get(model, {})
                 
                 for r_id, r_val in rollers.items():
-                    display_id = r_id.split('_')[0] 
+                    display_id = re.sub(r"_\d+$", "", r_id)
                     if is_shaft_cat and str(qty_data.get(r_id)) == "2":
                         items.append((display_id, r_val, True))
                         items.append((display_id, r_val, True))
@@ -376,7 +437,11 @@ async def root():
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 @app.post("/api/ocr")
-async def analyze_ocr(files: List[UploadFile] = File(...), model: str = Form(...)):
+async def analyze_ocr(
+    files: List[UploadFile] = File(...),
+    model: str = Form(...),
+    thinking_level: Literal["low", "medium", "high"] = Form("medium"),
+):
     """支援單張或多張報表圖片同時辨識"""
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="未設定 GEMINI_API_KEY 環境變數。")
@@ -390,7 +455,11 @@ async def analyze_ocr(files: List[UploadFile] = File(...), model: str = Form(...
         file_tuples.append((content, file.filename))
     
     try:
-        recognizer = ReportOCRRecognizer(api_key=GEMINI_API_KEY, model=model)
+        recognizer = ReportOCRRecognizer(
+            api_key=GEMINI_API_KEY,
+            model=model,
+            thinking_level=thinking_level,
+        )
         raw_text = recognizer.analyze(file_tuples)
         
         processor = ReportDataProcessor()
