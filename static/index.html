@@ -54,6 +54,15 @@
 
                 </select>
             </div>
+            <div class="mb-3">
+                <label class="form-label fw-bold" for="thinkingLevelSelect">Thinking level</label>
+                <select class="form-select" id="thinkingLevelSelect" name="thinking_level">
+                    <option value="low">低</option>
+                    <option value="medium" selected>中（建議）</option>
+                    <option value="high">高</option>
+                </select>
+                <div class="form-text">較高的 thinking level 可能增加處理時間與 token 使用量；免費方案仍受模型速率與用量限制。</div>
+            </div>
             
             <!-- 拖曳與貼上區塊（支援多檔案） -->
             <div class="mb-4">
@@ -181,6 +190,7 @@
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const modelSelect = document.getElementById('modelSelect');
+            const thinkingLevelSelect = document.getElementById('thinkingLevelSelect');
             const btn = document.getElementById('submitBtn');
             const loading = document.getElementById('loading');
             const loadingText = document.getElementById('loadingText');
@@ -197,6 +207,7 @@
                 formData.append('files', file);
             });
             formData.append('model', modelSelect.value);
+            formData.append('thinking_level', thinkingLevelSelect.value);
 
             btn.disabled = true;
             loadingText.textContent = `使用 Gemini 同時辨識 ${selectedFiles.length} 頁報表中...`;
