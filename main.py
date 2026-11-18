@@ -373,17 +373,16 @@ class ExcelReportGenerator:
     def _apply_borders(self, max_row: int):
         """為整個表格區域添加最外框線，並在各施工項目間添加分隔線"""
         thin_border = Side(style='thin', color='000000')
-        medium_border = Side(style='medium', color='000000')
 
         for r in range(1, max_row + 1):
             for c in range(1, 31):
                 cell = self.ws.cell(row=r, column=c)
 
                 # 判定最外框線（上、下、左、右邊緣）
-                top = medium_border if r == 1 else None
-                bottom = medium_border if r == max_row else None
-                left = medium_border if c == 1 else None
-                right = medium_border if c == 30 else None
+                top = thin_border if r == 1 else None
+                bottom = thin_border if r == max_row else None
+                left = thin_border if c == 1 else None
+                right = thin_border if c == 30 else None
 
                 # 施工項目分隔線與表頭底線
                 if r == 1:
