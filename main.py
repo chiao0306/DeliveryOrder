@@ -231,9 +231,9 @@ class ExcelReportGenerator:
         self.ws = self.wb.active
         self.ws.title = "軋輥組裝報表"
         
-        self.font_header = Font(name="微軟正黑體", size=10, bold=True, color="FFFFFF")
-        self.font_body = Font(name="微軟正黑體", size=10)
-        self.font_bold = Font(name="微軟正黑體", size=10, bold=True)
+        self.font_header = Font(name="標楷體", size=10, bold=True, color="FFFFFF")
+        self.font_body = Font(name="標楷體", size=10)
+        self.font_bold = Font(name="標楷體", size=10, bold=True)
         self.fill_header_main = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
         self.fill_pair_1 = PatternFill(start_color="16A085", end_color="16A085", fill_type="solid")
         self.fill_pair_2 = PatternFill(start_color="1ABC9C", end_color="1ABC9C", fill_type="solid")
